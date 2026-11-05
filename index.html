@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Storm Money — Chain Edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* ground */
+  --bg: #0a0c11;
+  --bg-elev: #12151c;
+  --bg-elev-2: #181c25;
+  --bg-elev-3: #1f2430;
+  --fg: #edf0f6;
+  --fg-dim: #9aa3b8;
+  --fg-faint: #838da3;
+  --border: #242a36;
+  --border-soft: #1a1f29;
+
+  /* signal */
+  --accent: #49e6a4;       /* live / terminal green */
+  --accent-strong: #80f4c3;
+  --accent-ink: #05211a;   /* text on accent fill */
+  --warn: #f3ab3d;
+  --danger: #ff6485;
+  --info: #5fb3ff;
+
+  --font-display: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 3px),
+    radial-gradient(ellipse 1100px 600px at 50% -12%, rgba(73, 230, 164, 0.05), transparent 60%);
+  background-attachment: fixed;
+  color: var(--fg);
+  font-family: var(--font-body);
+  padding: 24px 16px 72px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 740px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; word-break: break-all; }
+
+a { color: var(--info); text-decoration-color: rgba(95,179,255,0.35); }
+a:hover { text-decoration-color: currentColor; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+p { margin: 0; line-height: 1.55; color: var(--fg-dim); font-size: 0.93rem; }
+p strong { color: var(--fg); font-weight: 600; }
+code { font-family: var(--font-mono); font-size: 0.88em; color: var(--fg); background: var(--bg-elev-3); padding: 0.1em 0.4em; border-radius: 4px; }
+
+/* ---------- hero / title screen ----------
+   A real title-screen moment: a HUD-framed panel with a receding grid and
+   a glowing bolt watermark, instead of a wordmark+h1+paragraph stack. The
+   grid/watermark are decorative, but the accent glow is intentionally
+   anchored to the one element (.bolt) that already carried --accent
+   before this pass — extending an existing "this is live" signal, not
+   inventing a new meaning for the color. */
+.hero {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 34px 26px 26px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: radial-gradient(ellipse 620px 320px at 12% -10%, rgba(73,230,164,0.10), transparent 62%);
+}
+.hero::before {
+  content: ""; position: absolute; inset: -20% -10% auto -10%; height: 220%; z-index: 0;
+  background-image:
+    linear-gradient(rgba(73,230,164,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(73,230,164,0.07) 1px, transparent 1px);
+  background-size: 34px 34px;
+  transform: perspective(360px) rotateX(55deg); transform-origin: top center;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 70%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 70%);
+  pointer-events: none;
+}
+.hero-bolt-mark {
+  position: absolute; right: 2px; top: -22px; z-index: 0; pointer-events: none;
+  font-size: clamp(5rem, 22vw, 9rem); line-height: 1; color: var(--accent); opacity: 0.08;
+}
+.hero-corner { position: absolute; width: 16px; height: 16px; border: 1.5px solid var(--accent); opacity: 0.4; z-index: 1; }
+.hero-corner--tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+.hero-corner--tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+.hero-corner--bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+.hero-corner--br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+
+.page-head { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; }
+.wordmark {
+  display: flex; align-items: baseline; gap: 10px;
+  font-family: var(--font-display); font-size: 0.84rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-dim);
+}
+.wordmark .bolt {
+  color: var(--accent); font-size: 1.15rem;
+  text-shadow: 0 0 18px rgba(73,230,164,0.65), 0 0 36px rgba(73,230,164,0.3);
+  animation: bolt-flicker 4.4s ease-in-out infinite;
+}
+h1 {
+  font-family: var(--font-display); font-weight: 700; margin: 0;
+  font-size: clamp(2.15rem, 8vw, 3.4rem); letter-spacing: -0.02em; line-height: 1.02;
+}
+.tagline { color: var(--fg-dim); font-size: clamp(0.95rem, 2vw, 1.05rem); max-width: 46em; line-height: 1.6; }
+
+.hero-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.hero-fact {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-display); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--fg-faint);
+  border: 1px solid var(--border-soft); border-radius: 999px; padding: 5px 11px;
+  background: var(--bg-elev-2);
+}
+.hero-fact-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(73,230,164,0.18); animation: pulse 2.2s ease-in-out infinite; flex: none; }
+
+.sound-toggle { min-height: 30px; padding: 4px 12px; font-size: 0.72rem; align-self: flex-start; }
+
+@keyframes bolt-flicker {
+  0%, 92%, 100% { opacity: 1; }
+  94% { opacity: 0.4; }
+  96% { opacity: 1; }
+  97% { opacity: 0.55; }
+}
+
+/* first-paint entrance — staggered rise, the title-screen "boot" moment */
+.hero-anim { opacity: 0; transform: translateY(10px); animation: hero-rise 620ms cubic-bezier(0.16,1,0.3,1) forwards; }
+.hero-anim:nth-child(1) { animation-delay: 40ms; }
+.hero-anim:nth-child(2) { animation-delay: 120ms; }
+.hero-anim:nth-child(3) { animation-delay: 200ms; }
+.hero-anim:nth-child(4) { animation-delay: 280ms; }
+.hero-anim:nth-child(5) { animation-delay: 340ms; }
+@keyframes hero-rise { to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .wordmark .bolt { animation: none; }
+  .hero-fact-dot { animation: none; }
+  .hero-anim { opacity: 1; transform: none; animation: none; }
+}
+
+/* ---------- notice ---------- */
+.notice {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: rgba(243, 171, 61, 0.07);
+  border: 1px solid rgba(243, 171, 61, 0.35);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px; padding: 12px 14px;
+}
+.notice .tag {
+  flex: none; font-family: var(--font-display); font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.1em; color: var(--warn); padding-top: 1px;
+}
+.notice p { color: var(--fg); font-size: 0.86rem; }
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 16px;
+  position: relative;
+}
+.card--live { border-color: rgba(73, 230, 164, 0.28); box-shadow: 0 0 0 1px rgba(73,230,164,0.04), 0 24px 48px -32px rgba(73,230,164,0.18); }
+.card--live::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+  background: linear-gradient(to bottom, var(--accent), transparent 85%);
+  border-radius: 3px 0 0 3px;
+}
+/* HUD corner brackets — a repeated "this panel is live" motif instead of
+   a generic rounded card, built from the same accent already reserved
+   for live/interactive state. */
+.card-corner { position: absolute; width: 14px; height: 14px; border: 1.5px solid rgba(73,230,164,0.5); pointer-events: none; }
+.card-corner--tl { top: -1px; left: -1px; border-right: none; border-bottom: none; border-radius: 12px 0 0 0; }
+.card-corner--tr { top: -1px; right: -1px; border-left: none; border-bottom: none; border-radius: 0 12px 0 0; }
+.card-corner--bl { bottom: -1px; left: -1px; border-right: none; border-top: none; border-radius: 0 0 0 12px; }
+.card-corner--br { bottom: -1px; right: -1px; border-left: none; border-top: none; border-radius: 0 0 12px 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.card-head h2 {
+  display: flex; align-items: baseline; gap: 10px; margin: 0;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
+}
+.card-head-sub { font-family: var(--font-body); font-weight: 400; font-size: 0.82rem; color: var(--fg-faint); }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot--live { background: var(--accent); box-shadow: 0 0 0 3px rgba(73,230,164,0.18); animation: pulse 2.2s ease-in-out infinite; }
+.dot--archive { background: var(--fg-faint); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .dot--live { animation: none; } }
+
+.pill {
+  font-family: var(--font-display); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-dim);
+  white-space: nowrap;
+}
+.pill--live { color: var(--accent); border-color: rgba(73,230,164,0.4); background: rgba(73,230,164,0.08); }
+.pill--archive { color: var(--fg-faint); border-color: var(--border); }
+.pill-danger { color: var(--danger); border-color: rgba(255,100,133,0.4); background: rgba(255,100,133,0.08); }
+
+/* contract chip */
+.contract-chip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft);
+  border-radius: 8px; padding: 10px 12px;
+}
+.contract-chip-label { font-family: var(--font-display); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-faint); }
+.contract-chip-id { font-size: 0.78rem; color: var(--fg-dim); flex: 1 1 260px; }
+.contract-chip-link { font-family: var(--font-display); font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+
+/* ---------- setup sequence ---------- */
+/* Onboarding progress rail — a visible "step N of 3" bar driven entirely
+   by the existing .step--done class the real click handlers already add.
+   No new JS: :has() reads the same state the proven handlers set. */
+.onboard-progress { height: 4px; border-radius: 3px; background: var(--border-soft); overflow: hidden; margin-top: 10px; max-width: 240px; }
+.onboard-progress-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); transition: width 420ms cubic-bezier(0.16,1,0.3,1); }
+.card:has(#setupPanel .step:nth-child(1).step--done) .onboard-progress-fill { width: 34%; }
+.card:has(#setupPanel .step:nth-child(2).step--done) .onboard-progress-fill { width: 67%; }
+.card:has(#setupPanel .step:nth-child(3).step--done) .onboard-progress-fill { width: 100%; }
+
+.setup-steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+.step { display: flex; gap: 14px; padding: 14px 10px; position: relative; border-radius: 10px; transition: background 220ms ease; }
+.step.step--done { background: rgba(73,230,164,0.045); }
+.step:not(:last-child)::after {
+  content: ""; position: absolute; left: 15px; top: 44px; bottom: -6px; width: 2px;
+  background: var(--border); transition: background 320ms ease;
+}
+.step.step--done:not(:last-child)::after { background: linear-gradient(to bottom, var(--accent), var(--border)); }
+.step-index {
+  flex: none; width: 32px; height: 32px; border-radius: 50%; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 0.86rem; font-weight: 700;
+  background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--fg-faint);
+  z-index: 1; transition: background 200ms ease, border-color 200ms ease, color 200ms ease, transform 200ms ease;
+}
+.step-index-num { transition: opacity 160ms ease; }
+.step-index-check {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transform: scale(0.5); transition: opacity 160ms ease, transform 160ms ease;
+}
+.step--done .step-index { transform: scale(1.05); }
+.step--done .step-index-num { opacity: 0; }
+.step--done .step-index-check { opacity: 1; transform: scale(1); }
+.step-body { flex: 1; display: flex; flex-direction: column; gap: 6px; padding-top: 2px; min-width: 0; }
+.step-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 2px; }
+.step-tag { font-family: var(--font-display); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-faint); }
+.step-state {
+  font-family: var(--font-display); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-faint);
+}
+.step-state::before { content: "locked"; }
+.step:not(:has(button:disabled)):not(.step--done) .step-state { color: var(--accent); border-color: rgba(73,230,164,0.4); background: rgba(73,230,164,0.08); }
+.step:not(:has(button:disabled)):not(.step--done) .step-state::before { content: "ready"; }
+.step.step--done .step-state { color: var(--fg-dim); border-color: var(--border); background: transparent; }
+.step.step--done .step-state::before { content: "done"; }
+.step-hint { font-size: 0.82rem; color: var(--fg-faint); }
+/* a step whose action isn't available yet (its button is still disabled)
+   recedes as a whole — number + hint fade together with the button's own
+   :disabled dimming, so the eye lands on whichever step is actually next. */
+.step:has(button:disabled) .step-index,
+.step:has(button:disabled) .step-hint { opacity: 0.6; }
+
+button {
+  font-family: var(--font-display); font-size: 0.88rem; font-weight: 600; letter-spacing: 0.01em;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-elev-2); color: var(--fg); padding: 11px 16px; cursor: pointer; min-height: 44px;
+  transition: border-color 120ms ease, background 120ms ease, transform 80ms ease;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:active:not(:disabled) { transform: scale(0.98); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover:not(:disabled) { background: var(--accent-strong); }
+button.action-btn { align-self: flex-start; }
+button.roll-btn { border-color: rgba(95,179,255,0.45); color: var(--info); }
+button.roll-btn:hover:not(:disabled) { border-color: var(--info); }
+button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* wallet key reveal */
+.wallet-info { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.key-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 10px;
+}
+.key-row--secret { border-color: rgba(255,100,133,0.3); }
+.key-label { font-family: var(--font-display); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-faint); flex: none; width: 52px; }
+.key-value { flex: 1 1 240px; font-size: 0.76rem; color: var(--fg-dim); }
+.copy-btn {
+  font-family: var(--font-display); font-size: 0.66rem; font-weight: 600; letter-spacing: 0.05em;
+  padding: 4px 9px; min-height: auto; border-radius: 5px; background: var(--bg-elev-3); color: var(--fg-dim);
+}
+.key-warning { font-size: 0.78rem; color: var(--danger); }
+
+/* ---------- status grid ---------- */
+.divider { border-top: 1px dashed var(--border); margin: 2px 0; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 12px; }
+.tile { background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; transition: border-color 200ms ease; }
+.tile .label { display: flex; align-items: center; gap: 5px; font-family: var(--font-display); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-faint); }
+.tile .label::before { font-size: 0.85em; opacity: 0.85; }
+.tile .value { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 600; color: var(--fg); }
+.tile .value-unit { font-size: 0.68rem; font-weight: 400; color: var(--fg-faint); margin-left: 2px; }
+.tile .value--good { color: var(--accent); }
+.tile .value--muted { color: var(--fg-faint); }
+.tile--alert { border-color: rgba(255,100,133,0.35); }
+.tile-bar { height: 4px; border-radius: 3px; background: var(--border-soft); overflow: hidden; margin-top: 4px; }
+.tile-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); transition: width 500ms cubic-bezier(0.16,1,0.3,1); }
+
+/* per-stat glyphs and typographic emphasis — CSS-only, matched to tile
+   position, so the two already-live sources (on-chain player state and
+   the indexer's /stats) both read richer without touching their render
+   functions. Round and Cash lead visually because they're what a player
+   is actually tracking round to round; icons reuse existing fg-faint /
+   warn / accent tokens rather than inventing new colors. */
+#statusGrid .tile:nth-child(1) .value,
+#statusGrid .tile:nth-child(2) .value { font-size: 1.55rem; }
+#statusGrid .tile:nth-child(1) .label::before { content: "\21BB"; }
+#statusGrid .tile:nth-child(2) .label::before { content: "\FFE5"; }
+#statusGrid .tile:nth-child(3) .label::before { content: "\2302"; }
+#statusGrid .tile:nth-child(4) .label::before { content: "\25A3"; }
+#statusGrid .tile:nth-child(5) .label::before { content: "\2013"; }
+#statusGrid .tile:nth-child(6) .label::before { content: "\2602"; }
+#lbStats .tile:nth-child(1) .label::before { content: "\25A3"; }
+#lbStats .tile:nth-child(2) .label::before { content: "\25CC"; }
+#lbStats .tile:nth-child(3) .label::before { content: "\2620"; }
+#lbStats .tile:nth-child(4) .label::before { content: "\2609"; }
+#lbStats .tile:nth-child(5) .label::before { content: "\2248"; }
+
+.game-over { background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 8px; padding: 14px; }
+.game-over p { color: var(--fg); }
+
+/* ---------- tx log ---------- */
+.log-head { font-family: var(--font-display); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-faint); }
+.log { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; }
+.log-item { display: flex; gap: 10px; font-size: 0.82rem; padding: 6px 0 6px 10px; border-left: 2px solid var(--border); color: var(--fg-dim); }
+.log-item--error { border-left-color: var(--danger); }
+.log-item--join { border-left-color: var(--accent); }
+.log-item--action { border-left-color: var(--info); }
+.log-item--fin { border-left-color: var(--warn); }
+.log-time { font-family: var(--font-mono); font-size: 0.72rem; color: var(--fg-faint); flex: none; padding-top: 1px; }
+.log-body strong { color: var(--fg); }
+.log-item a.tx-link { color: var(--info); font-family: var(--font-mono); font-size: 0.78rem; }
+
+.lb-list { display: flex; flex-direction: column; gap: 4px; }
+.lb-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+}
+.lb-rank { font-family: var(--font-mono); color: var(--fg-faint); font-weight: 600; }
+.lb-row--top .lb-rank { color: var(--accent); }
+.lb-row--top { border-color: rgba(73,230,164,0.3); }
+/* 2nd/3rd place get a quieter nod using existing tokens only — no new
+   colors invented for "medals". */
+#lbList .lb-row:nth-of-type(2) .lb-rank { color: var(--fg); }
+#lbList .lb-row:nth-of-type(3) .lb-rank { color: var(--warn); }
+.lb-player { font-family: var(--font-mono); color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
+.lb-score { font-family: var(--font-mono); color: var(--fg); font-weight: 600; }
+.lb-score--bankrupt { color: var(--danger); font-weight: 400; }
+.lb-status { font-family: var(--font-display); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-faint); }
+.lb-empty { color: var(--fg-faint); font-size: 0.85rem; padding: 8px 2px; }
+.pill--offline { color: var(--fg-faint); border-color: var(--border); background: transparent; }
+.pill--stale { color: var(--warn); border-color: rgba(243,171,61,0.35); background: rgba(243,171,61,0.08); }
+
+/* ---------- gamification layer (progression / achievements) ----------
+   Added on top of the terminal/ledger register, by explicit user
+   override of the "never ambient decoration" rule for this page (see
+   BRAND.md). Every element here reacts to real confirmed contract state
+   via the Progression module in the script block below — nothing here
+   is a client-side fake reward. Colors reuse the page's existing,
+   already-contrast-checked tokens rather than inventing new ones. */
+.achv-shelf { display: flex; flex-direction: column; gap: 8px; }
+.achv-progress { display: flex; align-items: center; gap: 10px; }
+.achv-progress-label { font-family: var(--font-display); font-size: 0.66rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-faint); white-space: nowrap; }
+.achv-progress-bar { flex: 1; height: 4px; border-radius: 3px; background: var(--border-soft); overflow: hidden; max-width: 220px; }
+.achv-progress-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); transition: width 500ms cubic-bezier(0.16,1,0.3,1); }
+.achv-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.achv-icon { font-size: 0.85em; opacity: 0.85; }
+.achv-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-display); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+  padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-elev-2); color: var(--fg-faint);
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.achv-badge .achv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex: none; }
+.achv-badge--unlocked { color: var(--accent); border-color: rgba(73,230,164,0.4); background: rgba(73,230,164,0.08); }
+.achv-badge--unlocked .achv-dot { background: var(--accent); }
+
+.achv-toast-wrap {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  display: flex; flex-direction: column; gap: 8px; max-width: min(360px, calc(100vw - 32px));
+}
+.achv-toast {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--bg-elev-2); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 12px 14px; box-shadow: 0 16px 32px -20px rgba(0,0,0,0.6);
+  animation: achv-in 220ms ease-out;
+}
+.achv-toast--outcome-win { border-left-color: var(--accent); }
+.achv-toast--outcome-loss { border-left-color: var(--danger); }
+.achv-toast-tag {
+  font-family: var(--font-display); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent); flex: none; padding-top: 2px;
+}
+.achv-toast--outcome-loss .achv-toast-tag { color: var(--danger); }
+.achv-toast-body { display: flex; flex-direction: column; gap: 2px; }
+.achv-toast-title { font-family: var(--font-display); font-weight: 700; font-size: 0.86rem; color: var(--fg); }
+.achv-toast-desc { font-size: 0.78rem; color: var(--fg-dim); line-height: 1.4; }
+@keyframes achv-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes achv-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-4px); } }
+.achv-toast--leaving { animation: achv-out 180ms ease-in forwards; }
+
+/* storm: unmistakable the instant it happens, per BRAND.md's storm-event
+   rule — a real-time flash on the Stellar card tied to an actual
+   confirmed Storm roll, not a styled log line among others. */
+.storm-flash { animation: storm-flash-anim 900ms ease-out; }
+.storm-flash--loss { animation: storm-flash-loss-anim 900ms ease-out; }
+@keyframes storm-flash-anim {
+  0% { box-shadow: 0 0 0 1px rgba(73,230,164,0.04), 0 24px 48px -32px rgba(73,230,164,0.18); transform: translateX(0); }
+  12% { transform: translateX(-3px); }
+  24% { transform: translateX(3px); }
+  36% { transform: translateX(-1px); }
+  48% { transform: translateX(0); box-shadow: 0 0 0 3px rgba(95,179,255,0.55), 0 0 60px -10px rgba(95,179,255,0.5); }
+  100% { box-shadow: 0 0 0 1px rgba(73,230,164,0.04), 0 24px 48px -32px rgba(73,230,164,0.18); transform: translateX(0); }
+}
+@keyframes storm-flash-loss-anim {
+  0% { box-shadow: 0 0 0 1px rgba(73,230,164,0.04), 0 24px 48px -32px rgba(73,230,164,0.18); transform: translateX(0); }
+  12% { transform: translateX(-4px); }
+  24% { transform: translateX(4px); }
+  36% { transform: translateX(-2px); }
+  48% { transform: translateX(0); box-shadow: 0 0 0 3px rgba(255,100,133,0.6), 0 0 60px -10px rgba(255,100,133,0.55); }
+  100% { box-shadow: 0 0 0 1px rgba(73,230,164,0.04), 0 24px 48px -32px rgba(73,230,164,0.18); transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .storm-flash, .storm-flash--loss { animation: none; }
+  .achv-toast, .achv-toast--leaving { animation: none; }
+}
+
+/* a floating +/- badge on the Cash tile after a confirmed tx changes
+   balance — amplifies the real latency/confirmation instead of hiding it,
+   since it only appears once refreshState() has the post-confirmation
+   number back from the chain. */
+.tile { position: relative; }
+.cash-delta {
+  position: absolute; top: -8px; right: -6px;
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700;
+  color: var(--accent); background: var(--bg-elev-3); border: 1px solid rgba(73,230,164,0.35);
+  border-radius: 999px; padding: 1px 7px;
+  animation: cash-delta-float 1500ms ease-out forwards;
+}
+.cash-delta--down { color: var(--danger); border-color: rgba(255,100,133,0.35); }
+@keyframes cash-delta-float {
+  0% { opacity: 0; transform: translateY(2px); }
+  20% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+@media (prefers-reduced-motion: reduce) { .cash-delta { animation: none; opacity: 1; } }
+
+/* ---------- onboarding as opening beats, not a config screen ----------
+   The setup steps reuse the same achievement/progression visual language
+   as the live game panel below (accent-filled circle on completion, same
+   toast/badge palette) so the page reads as one continuous game from
+   first paint — not "boring setup, then the game starts." Each .step-index
+   fills in like an achv-badge once its step's real action (keypair
+   generated / Friendbot funded / join() confirmed) actually completes;
+   nothing here is decorative state unlinked from a real event. */
+.onboard-intro { display: flex; flex-direction: column; gap: 4px; }
+.onboard-kicker {
+  font-family: var(--font-display); font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
+}
+.onboard-subline { font-size: 0.85rem; color: var(--fg-faint); }
+.step-index { transition: background 180ms ease, border-color 180ms ease, color 180ms ease; }
+.step--done .step-index {
+  background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+}
+
+@media (max-width: 480px) {
+  .card { padding: 16px; }
+  .key-label { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <span class="hero-bolt-mark" aria-hidden="true">⚡</span>
+    <span class="hero-corner hero-corner--tl" aria-hidden="true"></span>
+    <span class="hero-corner hero-corner--tr" aria-hidden="true"></span>
+    <span class="hero-corner hero-corner--bl" aria-hidden="true"></span>
+    <span class="hero-corner hero-corner--br" aria-hidden="true"></span>
+    <header class="page-head">
+      <div class="wordmark hero-anim"><span class="bolt" aria-hidden="true">⚡</span>STORM MONEY</div>
+      <h1 class="hero-anim">Chain Edition</h1>
+      <p class="tagline hero-anim">Storm Money, made real. Same lessons in passive income, risk, and the freedom of being Free — now running on a live blockchain, one real signed transaction at a time.</p>
+      <div class="hero-facts hero-anim" aria-hidden="true">
+        <span class="hero-fact"><span class="hero-fact-dot"></span>live · stellar testnet</span>
+        <span class="hero-fact">20 rounds / run</span>
+        <span class="hero-fact">every action a real signed tx</span>
+      </div>
+      <div class="row hero-anim" style="margin-top:2px">
+        <button id="btnMuteToggle" type="button" class="sound-toggle">🔊 Sound on</button>
+      </div>
+    </header>
+  </div>
+
+  <!-- ===================== STELLAR ===================== -->
+  <div class="card card--live" id="stellarCard">
+    <span class="card-corner card-corner--tl" aria-hidden="true"></span>
+    <span class="card-corner card-corner--tr" aria-hidden="true"></span>
+    <span class="card-corner card-corner--bl" aria-hidden="true"></span>
+    <span class="card-corner card-corner--br" aria-hidden="true"></span>
+    <div class="card-head">
+      <h2><span class="dot dot--live" aria-hidden="true"></span>Stellar <span class="card-head-sub">the fast economy</span></h2>
+      <span class="pill pill--live">live · testnet</span>
+    </div>
+
+    <div class="contract-chip">
+      <span class="contract-chip-label">contract</span>
+      <span class="num contract-chip-id">CABDVHFVUJSNTWLHYWWSOWKIZS6OYFOSRLQNXPXI2OICFSHZCNMG4RAT</span>
+      <a id="contractLink" href="#" target="_blank" class="contract-chip-link">view on Stellar Expert →</a>
+    </div>
+
+    <div class="onboard-intro">
+      <span class="onboard-kicker">Your run starts here</span>
+      <p class="onboard-subline">No wallet experience required — you'll generate a real one in the next step.</p>
+      <div class="onboard-progress" aria-hidden="true"><span class="onboard-progress-fill"></span></div>
+    </div>
+
+    <div id="setupPanel" class="setup-steps">
+      <div class="step">
+        <span class="step-index"><span class="step-index-num">1</span><span class="step-index-check" aria-hidden="true">✓</span></span>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-tag">Step 1 · keypair</span>
+            <span class="step-state" aria-hidden="true"></span>
+          </div>
+          <div class="row"><button class="primary action-btn" id="btnGenerate">Create your identity</button></div>
+          <p class="step-hint">Creates a disposable Ed25519 keypair (the one-time login key this game uses to sign for you) in your browser. Nothing leaves this tab until you fund it.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-index"><span class="step-index-num">2</span><span class="step-index-check" aria-hidden="true">✓</span></span>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-tag">Step 2 · friendbot</span>
+            <span class="step-state" aria-hidden="true"></span>
+          </div>
+          <div class="row"><button class="action-btn" id="btnFund" disabled>Get funded</button></div>
+          <p class="step-hint">Friendbot airdrops test XLM directly to the key above — no faucet form, no waiting room.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-index"><span class="step-index-num">3</span><span class="step-index-check" aria-hidden="true">✓</span></span>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-tag">Step 3 · join()</span>
+            <span class="step-state" aria-hidden="true"></span>
+          </div>
+          <div class="row"><button class="action-btn" id="btnJoin" disabled>Enter the game</button></div>
+          <p class="step-hint">Signs and submits the first real transaction: <code>join()</code> on the live contract.</p>
+        </div>
+      </div>
+      <div id="walletInfo" class="wallet-info"></div>
+    </div>
+
+    <div id="gamePanel" hidden>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="status-grid" id="statusGrid"></div>
+      <div class="achv-shelf" id="achvShelf" aria-live="polite"></div>
+      <div class="row" id="actionRow"></div>
+      <div class="log-head">transaction log</div>
+      <div class="log" id="txLog" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- ===================== LEADERBOARD (indexer-backed) ===================== -->
+  <div class="card card--live" id="lbCard">
+    <span class="card-corner card-corner--tl" aria-hidden="true"></span>
+    <span class="card-corner card-corner--tr" aria-hidden="true"></span>
+    <span class="card-corner card-corner--bl" aria-hidden="true"></span>
+    <span class="card-corner card-corner--br" aria-hidden="true"></span>
+    <div class="card-head">
+      <h2><span class="dot" id="lbDot" aria-hidden="true"></span>Leaderboard <span class="card-head-sub">indexed from real contract events</span></h2>
+      <span class="pill" id="lbPill">checking…</span>
+    </div>
+    <p>Reads from a separate indexer service that polls this same contract's
+       <code>RoundResolved</code>/<code>ActionTaken</code>/<code>GameFinished</code>
+       events into Postgres — it never touches the chain itself, so it can
+       be stale or offline without affecting play above. Loan/repay/insure
+       actions don't appear here yet.
+       <details style="display:inline; margin-left:4px;">
+         <summary style="display:inline; cursor:pointer; color:var(--fg-faint); font-size:0.82em;">why?</summary>
+         <span style="display:block; margin-top:6px; font-size:0.92em;">The contract doesn't emit events for
+         those actions yet — a contract gap, not an indexer bug. See
+         <code>backend/README.md</code>.</span>
+       </details></p>
+    <div class="status-grid" id="lbStats"></div>
+    <div class="row" style="margin-top:4px">
+      <button class="action-btn fin-btn" id="btnLbRefresh" type="button">Refresh leaderboard</button>
+    </div>
+    <div class="log-head" style="margin-top:10px">best finished games</div>
+    <div class="lb-list" id="lbList"></div>
+  </div>
+
+</div>
+
+<div id="achvToasts" class="achv-toast-wrap" aria-live="polite"></div>
+
+<script type="module">
+import * as StellarSdk from "https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@17.4.0/+esm";
+
+const CONTRACT_ID = "CABDVHFVUJSNTWLHYWWSOWKIZS6OYFOSRLQNXPXI2OICFSHZCNMG4RAT";
+const RPC_URL = "https://soroban-testnet.stellar.org";
+const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
+const FRIENDBOT_URL = "https://friendbot.stellar.org";
+
+document.getElementById("contractLink").href =
+  `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`;
+
+let keypair = null;
+let client = null;
+
+const $ = (id) => document.getElementById(id);
+const walletInfo = $("walletInfo");
+const statusGrid = $("statusGrid");
+const actionRow = $("actionRow");
+const txLog = $("txLog");
+
+// ---- audio (Web Audio API; procedurally synthesized, no external files) ----
+// Each tone is distinct because each real event it confirms is distinct: a
+// clean, consistent "a real signed transaction just happened" confirm tone,
+// a separate local "key materialized" sound for wallet generation (which
+// never touches the network, so it must not sound like a transaction), a
+// warm "funds received" chime for Friendbot, and a distinct glitch tone for
+// errors. play() never throws — a blocked AudioContext or missing Web Audio
+// support can never interfere with an actual transaction. Nothing plays
+// before a real click; the context is created/resumed lazily on first use,
+// and every call site below is inside a click handler, so that's always a
+// real user gesture.
+const SFX_MUTE_KEY = "stormMoneyChainMuted";
+const ChainSFX = (() => {
+  let ctx = null;
+  let muted = false;
+  try { muted = window.localStorage.getItem(SFX_MUTE_KEY) === "1"; } catch (e) { /* no storage, default on */ }
+
+  function ensureCtx() {
+    if (ctx) { if (ctx.state === "suspended") { try { ctx.resume(); } catch (e) {} } return ctx; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    ctx = new AC();
+    return ctx;
+  }
+
+  function noiseBuffer(c, seconds) {
+    const n = Math.max(1, Math.floor(c.sampleRate * seconds));
+    const buf = c.createBuffer(1, n, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function tone(c, t0, freq, dur, opts = {}) {
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = opts.type || "sine";
+    osc.frequency.setValueAtTime(freq, t0);
+    if (opts.toFreq) osc.frequency.linearRampToValueAtTime(opts.toFreq, t0 + dur);
+    if (opts.detune) osc.detune.setValueAtTime(opts.detune, t0);
+    const peak = opts.gain != null ? opts.gain : 0.2;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(peak, t0 + (opts.attack || 0.004));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(c.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+
+  function filteredNoise(c, t0, dur, opts = {}) {
+    const src = c.createBufferSource();
+    src.buffer = noiseBuffer(c, dur);
+    const filter = c.createBiquadFilter();
+    filter.type = opts.filterType || "highpass";
+    filter.frequency.setValueAtTime(opts.freq || 2000, t0);
+    if (opts.toFreq) filter.frequency.linearRampToValueAtTime(opts.toFreq, t0 + dur);
+    filter.Q.value = opts.q || 1;
+    const gain = c.createGain();
+    const peak = opts.gain != null ? opts.gain : 0.25;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(peak, t0 + (opts.attack || 0.002));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(c.destination);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+  }
+
+  const SOUNDS = {
+    // wallet generated locally — no network call yet, so this is deliberately
+    // NOT a "transaction" sound: a quick bright spark of key material appearing
+    keygen: (c, t0) => {
+      filteredNoise(c, t0, 0.035, { filterType: "highpass", freq: 4000, gain: 0.16, attack: 0.001 });
+      tone(c, t0 + 0.01, 900, 0.18, { type: "sine", toFreq: 1800, gain: 0.14, attack: 0.005 });
+      tone(c, t0 + 0.01, 905, 0.18, { type: "sine", toFreq: 1810, gain: 0.1, attack: 0.005 });
+    },
+    // Friendbot funded the account — a warm two-note "received" chime
+    funded: (c, t0) => {
+      tone(c, t0, 600, 0.16, { type: "sine", gain: 0.16, attack: 0.004 });
+      tone(c, t0 + 0.1, 900, 0.22, { type: "sine", gain: 0.16, attack: 0.004 });
+    },
+    // joined the on-chain game — the first real signed transaction: two
+    // tones converging into one, a felt "handshake" with the contract
+    joined: (c, t0) => {
+      tone(c, t0, 500, 0.3, { type: "sine", toFreq: 700, gain: 0.15, attack: 0.005 });
+      tone(c, t0, 900, 0.3, { type: "sine", toFreq: 700, gain: 0.12, attack: 0.005 });
+      tone(c, t0 + 0.05, 90, 0.2, { type: "sine", gain: 0.2, attack: 0.002 });
+    },
+    // any later signed transaction confirming on-chain — the recurring
+    // "that was real" tick: short, consistent, slightly weighty
+    txConfirm: (c, t0) => {
+      tone(c, t0, 1000, 0.07, { type: "square", gain: 0.12, attack: 0.001 });
+      tone(c, t0 + 0.06, 1300, 0.08, { type: "square", gain: 0.1, attack: 0.001 });
+      tone(c, t0, 85, 0.12, { type: "sine", gain: 0.18, attack: 0.001 });
+    },
+    // a call failed (Friendbot, join, or a game action) — a short dissonant glitch
+    error: (c, t0) => {
+      tone(c, t0, 300, 0.1, { type: "square", gain: 0.14, attack: 0.001 });
+      tone(c, t0, 318, 0.1, { type: "square", gain: 0.14, attack: 0.001 });
+      tone(c, t0 + 0.1, 220, 0.14, { type: "sawtooth", toFreq: 110, gain: 0.14, attack: 0.001 });
+    },
+    // an achievement unlocked — a bright ascending three-note flourish,
+    // distinct from the plain txConfirm tick so a real milestone stands out
+    achievement: (c, t0) => {
+      tone(c, t0, 523, 0.14, { type: "sine", gain: 0.16, attack: 0.004 });
+      tone(c, t0 + 0.09, 659, 0.14, { type: "sine", gain: 0.16, attack: 0.004 });
+      tone(c, t0 + 0.18, 784, 0.22, { type: "sine", gain: 0.18, attack: 0.004 });
+    },
+    // a real on-chain Storm roll resolving — a low rumble and a sharp
+    // crack, deliberately NOT the "error" glitch: this is a valid
+    // contract event, not a failed call
+    storm: (c, t0) => {
+      filteredNoise(c, t0, 0.22, { filterType: "lowpass", freq: 900, toFreq: 220, gain: 0.22, attack: 0.002 });
+      tone(c, t0 + 0.03, 140, 0.22, { type: "sawtooth", toFreq: 60, gain: 0.16, attack: 0.002 });
+      filteredNoise(c, t0 + 0.05, 0.05, { filterType: "highpass", freq: 3000, gain: 0.14, attack: 0.001 });
+    },
+    // full 20-round run completed without going bankrupt
+    complete: (c, t0) => {
+      tone(c, t0, 440, 0.16, { type: "sine", gain: 0.15, attack: 0.004 });
+      tone(c, t0 + 0.1, 554, 0.16, { type: "sine", gain: 0.15, attack: 0.004 });
+      tone(c, t0 + 0.2, 659, 0.16, { type: "sine", gain: 0.15, attack: 0.004 });
+      tone(c, t0 + 0.3, 880, 0.3, { type: "sine", gain: 0.18, attack: 0.004 });
+    },
+    // bankrupt — somber and descending; an honest ending tone, not a glitch
+    bankrupt: (c, t0) => {
+      tone(c, t0, 320, 0.22, { type: "sine", toFreq: 180, gain: 0.16, attack: 0.004 });
+      tone(c, t0 + 0.18, 220, 0.3, { type: "sine", toFreq: 110, gain: 0.14, attack: 0.004 });
+    }
+  };
+
+  function play(name) {
+    if (muted) return;
+    try {
+      const c = ensureCtx();
+      if (!c) return;
+      const fn = SOUNDS[name];
+      if (!fn) return;
+      fn(c, c.currentTime);
+    } catch (e) { /* audio is best-effort; never interfere with a real transaction */ }
+  }
+
+  function isMuted() { return muted; }
+  function toggleMute() {
+    muted = !muted;
+    try { window.localStorage.setItem(SFX_MUTE_KEY, muted ? "1" : "0"); } catch (e) {}
+    return muted;
+  }
+
+  return { play, isMuted, toggleMute };
+})();
+
+function syncMuteButton() {
+  const b = document.getElementById("btnMuteToggle");
+  if (b) {
+    b.textContent = ChainSFX.isMuted() ? "🔇 Sound off" : "🔊 Sound on";
+    b.setAttribute("aria-pressed", ChainSFX.isMuted() ? "true" : "false");
+  }
+}
+syncMuteButton();
+const btnMuteToggleEl = document.getElementById("btnMuteToggle");
+if (btnMuteToggleEl) {
+  btnMuteToggleEl.addEventListener("click", () => {
+    ChainSFX.toggleMute();
+    syncMuteButton();
+  });
+}
+
+function fmtNum(v) {
+  try { return v.toLocaleString(); } catch { return String(v); }
+}
+
+// ---- gamification layer: achievements/progression derived strictly from
+// confirmed on-chain state (see BRAND.md's override note for why this page
+// now carries decoration it didn't before). Every unlock below is traced
+// to a real signed, broadcast, confirmed transaction's resulting state —
+// nothing here is a client-side fake reward. `sync()` is called from
+// refreshState() right after a real get_state() call resolves; noteRoll()
+// is called from handleAction() right after a real roll_and_pay() call
+// resolves, reading the same already-unwrapped EventRoll tag the tx log
+// line uses. This module never touches call()/makeClient()/the Action
+// enum encoding — it only reacts to their results after the fact.
+const ACHV_KEY_PREFIX = "stormMoneyChainAchv:";
+const Progression = (() => {
+  const DEFS = [
+    { id: "joined", icon: "◆", title: "On The Ledger", desc: "Joined the live contract — your first real signed transaction this run." },
+    { id: "free", icon: "☉", title: "Free", desc: "Passive income covered expenses for the first time this run." },
+    { id: "storm_survived", icon: "⛈", title: "Storm Survived", desc: "Weathered a real on-chain Storm roll and kept playing." },
+    { id: "insured", icon: "☂", title: "Insured Operator", desc: "Bought insurance — a real mitigation against the next Storm." },
+    { id: "business", icon: "▣", title: "Business Owner", desc: "Opened your first Business tier asset on-chain." },
+    { id: "round_5", icon: "▸", title: "Five Rounds In", desc: "Reached round 5 of 20." },
+    { id: "round_10", icon: "▸▸", title: "Halfway", desc: "Reached round 10 of 20." },
+    { id: "round_15", icon: "▸▸▸", title: "Final Stretch", desc: "Reached round 15 of 20." },
+    { id: "finished", icon: "★", title: "Full Run", desc: "Completed all 20 rounds without going bankrupt." },
+  ];
+
+  let unlocked = new Set();
+  let pubKey = null;
+  let prev = null;
+  let pendingRollTag = null;
+
+  function storageKey() { return ACHV_KEY_PREFIX + (pubKey || "anon"); }
+  function persist() {
+    try { window.localStorage.setItem(storageKey(), JSON.stringify([...unlocked])); } catch (e) { /* best-effort */ }
+  }
+
+  // Fresh wallet = fresh game on this contract, so progression resets
+  // per public key rather than following "whoever last used this tab".
+  function load(pk) {
+    pubKey = pk;
+    unlocked = new Set();
+    prev = null;
+    pendingRollTag = null;
+    try {
+      const raw = window.localStorage.getItem(storageKey());
+      if (raw) JSON.parse(raw).forEach((id) => unlocked.add(id));
+    } catch (e) { /* best-effort */ }
+    renderShelf();
+  }
+
+  function renderShelf() {
+    const shelf = document.getElementById("achvShelf");
+    if (!shelf) return;
+    const pct = Math.round((unlocked.size / DEFS.length) * 100);
+    const progress = `<div class="achv-progress">`
+      + `<span class="achv-progress-label">${unlocked.size}/${DEFS.length} milestones</span>`
+      + `<span class="achv-progress-bar"><span style="width:${pct}%"></span></span>`
+      + `</div>`;
+    const badges = DEFS.map((d) => {
+      const on = unlocked.has(d.id);
+      return `<span class="achv-badge${on ? " achv-badge--unlocked" : ""}" title="${d.desc}">`
+        + `<span class="achv-icon" aria-hidden="true">${d.icon}</span>`
+        + `<span class="achv-dot" aria-hidden="true"></span>${d.title}</span>`;
+    }).join("");
+    shelf.innerHTML = progress + `<div class="achv-badges">${badges}</div>`;
+  }
+
+  function toast(cls, tag, title, desc) {
+    const wrap = document.getElementById("achvToasts");
+    if (!wrap) return;
+    const el = document.createElement("div");
+    el.className = `achv-toast ${cls}`;
+    el.innerHTML = `<span class="achv-toast-tag">${tag}</span>`
+      + `<span class="achv-toast-body">`
+      + `<span class="achv-toast-title">${title}</span>`
+      + `<span class="achv-toast-desc">${desc}</span>`
+      + `</span>`;
+    wrap.appendChild(el);
+    setTimeout(() => {
+      el.classList.add("achv-toast--leaving");
+      setTimeout(() => el.remove(), 220);
+    }, 4200);
+  }
+
+  function unlockAndAnnounce(id) {
+    if (unlocked.has(id)) return;
+    const def = DEFS.find((d) => d.id === id);
+    if (!def) return;
+    unlocked.add(id);
+    persist();
+    renderShelf();
+    toast("achv-toast--unlock", "ACHIEVEMENT UNLOCKED", def.title, def.desc);
+    ChainSFX.play("achievement");
+  }
+
+  function flashStorm(lostAsset) {
+    ChainSFX.play("storm");
+    const card = document.getElementById("stellarCard");
+    if (!card) return;
+    const cls = lostAsset ? "storm-flash--loss" : "storm-flash";
+    card.classList.remove("storm-flash", "storm-flash--loss");
+    void card.offsetWidth; // restart the animation if triggered twice in a row
+    card.classList.add(cls);
+    setTimeout(() => card.classList.remove(cls), 950);
+  }
+
+  function flashCashDelta(delta) {
+    if (!delta) return;
+    let cashTile = null;
+    document.querySelectorAll("#statusGrid .tile").forEach((t) => {
+      if (t.querySelector(".label")?.textContent === "Cash") cashTile = t;
+    });
+    if (!cashTile) return;
+    const badge = document.createElement("span");
+    badge.className = `cash-delta${delta < 0 ? " cash-delta--down" : ""}`;
+    badge.textContent = `${delta > 0 ? "+" : ""}${delta}`;
+    cashTile.appendChild(badge);
+    setTimeout(() => badge.remove(), 1600);
+  }
+
+  function announceJoin() {
+    unlockAndAnnounce("joined");
+  }
+
+  // Records the tag of a just-confirmed roll_and_pay() so the following
+  // sync() call (triggered by the refreshState() that always follows a
+  // roll) knows whether it's looking at a post-Storm state.
+  function noteRoll(tag) {
+    pendingRollTag = tag;
+  }
+
+  function sync(state) {
+    const p = prev;
+    if (p) flashCashDelta(state.cash - p.cash);
+
+    if (pendingRollTag === "Storm") {
+      const assetsBefore = p ? p.stalls + p.businesses : state.stalls + state.businesses;
+      const assetsAfter = state.stalls + state.businesses;
+      flashStorm(assetsAfter < assetsBefore);
+      if (!state.bankrupt) unlockAndAnnounce("storm_survived");
+    }
+    pendingRollTag = null;
+
+    if (state.free_round && (!p || !p.free_round)) unlockAndAnnounce("free");
+    if (state.insured && (!p || !p.insured)) unlockAndAnnounce("insured");
+    if (state.businesses > 0) unlockAndAnnounce("business");
+    if (state.round >= 5) unlockAndAnnounce("round_5");
+    if (state.round >= 10) unlockAndAnnounce("round_10");
+    if (state.round >= 15) unlockAndAnnounce("round_15");
+
+    if (state.game_over) {
+      if (state.bankrupt) {
+        toast("achv-toast--outcome-loss", "GAME OVER", "Bankrupt",
+          `Ranked last at round ${state.bankrupt_round || state.round}. Same honest call the kids' build makes — a loss doesn't get softened here either.`);
+        ChainSFX.play("bankrupt");
+      } else {
+        unlockAndAnnounce("finished");
+        toast("achv-toast--outcome-win", "RUN COMPLETE", `Final score ${state.final_score}`,
+          `Cash ${fmtNum(state.cash)} · ${state.stalls} stalls · ${state.businesses} businesses after 20 real on-chain rounds.`);
+        ChainSFX.play("complete");
+      }
+    }
+
+    prev = state;
+  }
+
+  return { load, sync, noteRoll, announceJoin };
+})();
+
+function logLine(html, kind = "info") {
+  const div = document.createElement("div");
+  div.className = `log-item log-item--${kind}`;
+  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  div.innerHTML = `<span class="log-time">${time}</span><span class="log-body">${html}</span>`;
+  txLog.prepend(div);
+}
+
+function explorerLink(hash) {
+  return `<a class="tx-link" href="https://stellar.expert/explorer/testnet/tx/${hash}" target="_blank">${hash.slice(0, 10)}…</a>`;
+}
+
+$("btnGenerate").addEventListener("click", () => {
+  keypair = StellarSdk.Keypair.random();
+  ChainSFX.play("keygen");
+  walletInfo.innerHTML = `
+    <div class="key-row">
+      <span class="key-label">Public</span>
+      <span class="num key-value">${keypair.publicKey()}</span>
+      <button type="button" class="copy-btn" data-copy="${keypair.publicKey()}">copy</button>
+    </div>
+    <div class="key-row key-row--secret">
+      <span class="key-label">Secret</span>
+      <span class="num key-value">${keypair.secret()}</span>
+      <button type="button" class="copy-btn" data-copy="${keypair.secret()}">copy</button>
+    </div>
+    <p class="key-warning">testnet only — we show this key on purpose, so you can see nothing is hidden; never do this with real funds on mainnet</p>`;
+  walletInfo.querySelectorAll(".copy-btn").forEach((b) => {
+    b.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(b.dataset.copy);
+        const orig = b.textContent;
+        b.textContent = "copied";
+        setTimeout(() => { b.textContent = orig; }, 1200);
+      } catch (e) { /* clipboard unavailable — not fatal */ }
+    });
+  });
+  $("btnGenerate").closest(".step").classList.add("step--done");
+  $("btnFund").disabled = false;
+});
+
+$("btnFund").addEventListener("click", async () => {
+  $("btnFund").disabled = true;
+  $("btnFund").textContent = "Funding…";
+  try {
+    const resp = await fetch(`${FRIENDBOT_URL}?addr=${encodeURIComponent(keypair.publicKey())}`);
+    if (!resp.ok) throw new Error(`Friendbot HTTP ${resp.status}`);
+    $("btnFund").textContent = "Funded ✓";
+    $("btnFund").closest(".step").classList.add("step--done");
+    ChainSFX.play("funded");
+    $("btnJoin").disabled = false;
+  } catch (e) {
+    $("btnFund").textContent = "Get funded (retry)";
+    $("btnFund").disabled = false;
+    logLine(`<strong>Friendbot failed:</strong> ${e.message}`, "error");
+    ChainSFX.play("error");
+  }
+});
+
+async function makeClient() {
+  return await StellarSdk.contract.Client.from({
+    contractId: CONTRACT_ID,
+    rpcUrl: RPC_URL,
+    networkPassphrase: NETWORK_PASSPHRASE,
+    publicKey: keypair.publicKey(),
+    signTransaction: StellarSdk.contract.basicNodeSigner(keypair, NETWORK_PASSPHRASE).signTransaction,
+  });
+}
+
+async function call(methodName, args) {
+  const tx = await client[methodName](args);
+  const sent = await tx.signAndSend();
+  return sent;
+}
+
+async function refreshState() {
+  const tx = await client.get_state({ player: keypair.publicKey() });
+  const state = tx.result.value; // get_state returns Result<Player, Error> -> {value: Player} on success
+  statusGrid.innerHTML = `
+    <div class="tile tile--round">
+      <span class="label">Round</span>
+      <span class="value">${state.round}<span class="value-unit">/20</span></span>
+      <div class="tile-bar"><span style="width:${Math.max(0, Math.min(100, Math.round((state.round / 20) * 100)))}%"></span></div>
+    </div>
+    <div class="tile"><span class="label">Cash</span><span class="value">${fmtNum(state.cash)}</span></div>
+    <div class="tile"><span class="label">Stalls</span><span class="value">${state.stalls}</span></div>
+    <div class="tile"><span class="label">Businesses</span><span class="value">${state.businesses}</span></div>
+    <div class="tile ${state.loans > 0 ? "tile--alert" : ""}"><span class="label">Loans</span><span class="value">${state.loans}</span></div>
+    <div class="tile"><span class="label">Insured</span><span class="value ${state.insured ? "value--good" : "value--muted"}">${state.insured ? "Yes" : "No"}</span></div>`;
+  renderActions(state);
+  Progression.sync(state); // additive: reacts to this already-unwrapped state, doesn't change it
+  return state;
+}
+
+function renderActions(state) {
+  actionRow.innerHTML = "";
+  if (state.game_over) {
+    actionRow.innerHTML = `<div class="game-over"><p><strong>Game over.</strong> Final score: ${state.final_score}, final cash: ${state.bankrupt ? "—" : state.cash}${state.bankrupt ? " (bankrupt)" : ""}</p></div>`;
+    return;
+  }
+  const buttons = [];
+  if (state.awaiting_roll) {
+    buttons.push(["Roll the Storm die 🎲", "roll"]);
+  } else {
+    if (state.actions_left > 0) {
+      buttons.push([`Buy Stall (8 → +1/rd)`, "stall"]);
+      buttons.push([`Buy Business (24 → +4/rd)`, "business"]);
+      buttons.push([`Side Hustle (+3)`, "hustle"]);
+    }
+    buttons.push(["Take loan", "loan"]);
+    buttons.push(["Repay loan", "repay"]);
+    buttons.push(["Buy insurance", "insure"]);
+  }
+  for (const [label, action] of buttons) {
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    btn.classList.add("action-btn");
+    if (action === "roll") btn.classList.add("roll-btn");
+    if (!state.awaiting_roll && (action === "stall" || action === "business" || action === "hustle")) btn.classList.add("primary", "buy-btn");
+    if (action === "loan" || action === "repay" || action === "insure") btn.classList.add("fin-btn");
+    btn.addEventListener("click", () => handleAction(action));
+    actionRow.appendChild(btn);
+  }
+}
+
+async function handleAction(action) {
+  actionRow.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  try {
+    const player = keypair.publicKey();
+    let sent, label, kind;
+    if (action === "roll") {
+      sent = await call("roll_and_pay", { player });
+      label = `Rolled: <strong>${sent.result.value.tag}</strong>`; // Result<EventRoll, Error> -> {value: {tag}}
+      kind = "action";
+      Progression.noteRoll(sent.result.value.tag); // reads the same unwrapped tag, doesn't re-unwrap anything
+    } else if (action === "stall" || action === "business" || action === "hustle") {
+      const actionEnum = action === "stall" ? { tag: "BuyStall", values: void 0 }
+        : action === "business" ? { tag: "BuyBusiness", values: void 0 }
+        : { tag: "SideHustle", values: void 0 };
+      sent = await call("take_action", { player, action: actionEnum });
+      label = `Action: <strong>${action}</strong>`;
+      kind = "action";
+    } else if (action === "loan") {
+      sent = await call("take_loan", { player });
+      label = "Took a loan";
+      kind = "fin";
+    } else if (action === "repay") {
+      sent = await call("repay_loan", { player });
+      label = "Repaid a loan";
+      kind = "fin";
+    } else if (action === "insure") {
+      sent = await call("buy_insurance", { player });
+      label = "Bought insurance";
+      kind = "fin";
+    }
+    logLine(`${label} — ${explorerLink(sent.sendTransactionResponse?.hash ?? sent.getTransactionResponse?.txHash ?? "")}`, kind);
+    ChainSFX.play("txConfirm");
+  } catch (e) {
+    logLine(`Error: ${e.message}`, "error");
+    ChainSFX.play("error");
+  }
+  await refreshState();
+}
+
+$("btnJoin").addEventListener("click", async () => {
+  $("btnJoin").disabled = true;
+  $("btnJoin").textContent = "Entering…";
+  try {
+    Progression.load(keypair.publicKey()); // reset the achievement shelf for this disposable wallet
+    client = await makeClient();
+    const sent = await call("join", { player: keypair.publicKey() });
+    logLine(`Joined — ${explorerLink(sent.sendTransactionResponse?.hash ?? "")}`, "join");
+    ChainSFX.play("joined");
+    Progression.announceJoin(); // fires only after the real join tx above has confirmed
+    $("btnJoin").closest(".step").classList.add("step--done");
+    $("setupPanel").style.display = "none";
+    $("gamePanel").hidden = false;
+    await refreshState();
+  } catch (e) {
+    $("btnJoin").disabled = false;
+    $("btnJoin").textContent = "Enter the game (retry)";
+    logLine(`Join failed: ${e.message}`, "error");
+    ChainSFX.play("error");
+  }
+});
+
+// ---- leaderboard (reads the separate indexer/API service; never touches the chain) ----
+// Local preview only: the backend isn't deployed yet (see backend/README.md),
+// so this points at a locally-run instance. Swap for the deployed URL once one exists.
+const LEADERBOARD_API = "http://localhost:8745";
+
+function fmtScore(row) {
+  if (row.status === "bankrupt") {
+    return `<span class="lb-score lb-score--bankrupt">bankrupt, rd ${row.bankrupt_round ?? "?"}</span>`;
+  }
+  return `<span class="lb-score">${row.final_score}</span>`;
+}
+
+function renderLeaderboard(rows) {
+  const list = $("lbList");
+  if (!rows.length) {
+    list.innerHTML = '<div class="lb-empty">No finished games yet — play a full run to the end (or a bankruptcy) to appear here.</div>';
+    return;
+  }
+  list.innerHTML = rows
+    .map((row, i) => {
+      const shortPlayer = row.player.length > 12 ? `${row.player.slice(0, 6)}…${row.player.slice(-4)}` : row.player;
+      return `<div class="lb-row${i === 0 ? " lb-row--top" : ""}">
+        <span class="lb-rank">${i + 1}</span>
+        <span class="lb-player" title="${row.player}">${shortPlayer}</span>
+        ${fmtScore(row)}
+        <span class="lb-status">${row.status}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderLbStats(stats) {
+  const pct = (x) => (x === null || x === undefined ? "—" : `${Math.round(x * 100)}%`);
+  const num = (x) => (x === null || x === undefined ? "—" : x);
+  $("lbStats").innerHTML = `
+    <div class="tile"><span class="label">Finished</span><span class="value">${stats.games_total}</span></div>
+    <div class="tile"><span class="label">In progress</span><span class="value">${stats.games_in_progress}</span></div>
+    <div class="tile"><span class="label">Bankrupt rate</span><span class="value">${pct(stats.bankrupt_rate)}</span></div>
+    <div class="tile"><span class="label">Free rate</span><span class="value">${pct(stats.free_rate)}</span></div>
+    <div class="tile"><span class="label">Median score</span><span class="value">${num(stats.median_score)}</span></div>
+  `;
+}
+
+async function refreshLeaderboard() {
+  const pill = $("lbPill");
+  const dot = $("lbDot");
+  const btn = $("btnLbRefresh");
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = "Refreshing…";
+  try {
+    const [lbRes, statsRes] = await Promise.all([
+      fetch(`${LEADERBOARD_API}/leaderboard`),
+      fetch(`${LEADERBOARD_API}/stats`),
+    ]);
+    if (!lbRes.ok || !statsRes.ok) throw new Error(`HTTP ${lbRes.status}/${statsRes.status}`);
+    const lb = await lbRes.json();
+    const stats = await statsRes.json();
+    renderLeaderboard(lb.leaderboard);
+    renderLbStats(stats);
+    pill.textContent = "live · local backend";
+    pill.className = "pill pill--live";
+    dot.className = "dot dot--live";
+  } catch (e) {
+    pill.textContent = "backend offline";
+    pill.className = "pill pill--offline";
+    dot.className = "dot dot--archive";
+    $("lbList").innerHTML = `<div class="lb-empty">Can't reach the leaderboard backend at ${LEADERBOARD_API}. Start it with
+      <code>cd backend && npm run start</code> (needs Postgres + <code>npm run migrate</code> first —
+      see that directory's README) and refresh.</div>`;
+    $("lbStats").innerHTML = "";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
+$("btnLbRefresh").addEventListener("click", () => void refreshLeaderboard());
+void refreshLeaderboard();
+</script>
+</body>
+</html>
