@@ -661,3 +661,132 @@ scratchpad.
 own re-check found the file in the state its own report claimed — the
 first time in this file's review history that an independent gate
 pass didn't find something to fix.
+
+## Character creation (personas) — 2026-11-05
+
+Added at the user's explicit request for "an interactive interface with
+actual personalities that a user can create," with an explicit decision
+up front that personas would affect real gameplay (not just cosmetic
+flavor) — which meant a contract redeploy, a one-way door (no upgrade
+function exists on this contract; a new `join()` parameter needs a new
+contract ID, not an in-place update). The first generation stays live,
+unmodified, and un-migrated at
+`CABDVHFVUJSNTWLHYWWSOWKIZS6OYFOSRLQNXPXI2OICFSHZCNMG4RAT` for anyone
+with a game already on it. This page now points at the second
+generation, `CBO4POPU3FQXXYE353LKO6KNHT2QJRZGOFDTQEKELS3H2ZZBNEPF3SOE`
+— see the top-level README for the full persona table and the contract
+diff.
+
+**What's new in `index.html`:** Step 3 of onboarding ("Enter the game")
+now opens with a persona grid (`#personaGrid`, 5 cards — Classic,
+Hustler, Saver, Builder, Gambler — each showing its real mechanical
+effect, copied verbatim from the contract's own constants, not
+invented for display) and an operator-identity row (`#operatorName`
+text input, `#avatarPicker` emoji row). The persona choice is sent as a
+real argument to `join()` — `call("join", { player, persona: { tag:
+selectedPersona, values: void 0 } })` — and is therefore enforced by the
+contract itself, not just displayed by the client. The name/avatar are
+cosmetic only: saved to `localStorage` under a new
+`stormMoneyChainOperator:<pubkey>` key (same per-public-key pattern the
+achievement shelf already uses), never sent on-chain, and rendered in a
+new `#operatorBadge` once in-game. `renderActions()`'s cost/gain labels
+and affordability checks are now computed from `state.persona.tag` (the
+chain's own answer from a real `get_state()` call) via a new
+`personaRates()` helper, not hardcoded — if the contract's persona math
+ever disagrees with this helper, it's this helper that's wrong, by
+construction.
+
+**What's explicitly unchanged:** `makeClient()`, `call()`, the
+`tx.result.value`/`sent.result.value.tag` unwrapping, the `Action`
+enum encoding (`BuyStall`/`BuyBusiness`/`SideHustle`), and all three
+leaderboard functions — verified by grep before and after, same as
+every prior pass. The one deliberate exception to "never touch the
+sacred call-building lines" is `join()`'s own argument list, which
+necessarily changed because the contract's `join()` signature changed
+(`fn join(env, player, persona)` instead of `fn join(env, player)`) —
+not an accidental edit, the actual point of this pass.
+
+**Verification performed (CLI-based, not browser click-through this
+time):** the user asked to click through the browser UI personally
+after the last pass, so this pass did not run `rea`'s
+`capture_browser_scenario` (also still flagged unreliable in this
+environment per the notes above) or any substitute headless driver
+against the live page. Instead: (1) all 13 `cargo test` cases pass,
+including four new persona-specific tests and a `classic_persona_
+matches_original_flat_rates` control; (2) `stellar contract build`
+clean, 7 functions exported; (3) real testnet round-trips for all five
+personas against the freshly deployed second-generation contract —
+Hustler's Side Hustle paid exactly 5 (cash 13→18), Builder's stall cost
+exactly 6 (cash 13→7), Saver's expenses were exactly 1 lower on an
+`Emergency` roll (cash landed at 2, one more than the Classic-equivalent
+1 from the first generation's own earlier verification), Gambler's Side
+Hustle landed the 0-payout branch on a real transaction (cash 13→13,
+not 13→16), and Classic's `persona` field round-tripped correctly
+through `get_state` (`"persona":"Classic"`) even though a flaky testnet
+RPC window prevented confirming its roll/hustle math live in this pass
+specifically (the unit test and the first generation's extensive prior
+Classic-equivalent verification cover that math instead); (4)
+`node --check` on the extracted `<script type="module">` block passes;
+(5) grep-verified all "sacred" lines byte-identical except `join()`'s
+argument list, as scoped above.
+
+### Live verification — 2026-11-07
+
+The user asked the agent to do this click-through itself. `rea`'s
+`capture_browser_scenario` was skipped again (still on record above as
+hanging 30–45 min twice in this environment) in favor of the same
+from-scratch CDP driver approach the 2026-11-04 pass used successfully:
+a manually-launched headless Chrome (`--remote-debugging-port=9222`,
+killed after this pass) driven by a small Node script
+(`/tmp/storm-cdp/drive.mjs`, native `WebSocket`/`fetch`, no deps).
+
+**Real click-through, real testnet, no mocks:** generate identity
+(`GCJTKUR5U7...`) → select the Hustler persona card → type an operator
+name → select an avatar → fund via Friendbot → join. Final state,
+read back from the live DOM after the real `get_state()` call resolved:
+status grid `Round 1/20, Cash 10, Stalls 0, Businesses 0, Loans 0,
+Insured No`; operator badge `🦊 CDP Test Operator · Hustler — Grind
+harder, earn more` (the persona name/tagline there comes from
+`state.persona.tag`, the chain's own answer, not the client's local
+pick); tx log `Joined as CDP Test Operator (Hustler) — <real tx
+hash>`. Zero console errors or exceptions across the run.
+
+**One real bug found and fixed:** the Stellar card's contract-ID chip
+(`.contract-chip-id`) was hardcoded text in the HTML, while the
+"view on Stellar Expert →" link next to it was already set dynamically
+from the `CONTRACT_ID` constant. This was invisible before the persona
+redeploy (the hardcoded text happened to match the only contract that
+had ever existed) and became visibly wrong the moment a second
+generation was deployed — the chip kept showing the *first*
+generation's ID while the link correctly pointed at the second. Fixed
+by giving the span an id (`contractChipId`) and setting its
+`textContent` from the same `CONTRACT_ID` constant the link already
+uses, so the two can't drift apart again. Caught by a real screenshot
+during this pass, not by code review — the diff looked fine on paper
+since the JS responsible for the link was untouched.
+
+**One test-harness false alarm, not an app bug:** two of this pass's
+own DOM checks (`persona-card--selected` class, `avatar-opt--selected`
+class) read `false` immediately after a scripted click, because both
+`renderPersonaGrid()` and `renderAvatarPicker()` rebuild their
+container's `innerHTML` on every selection — which detaches the exact
+button node the test script's `.click()` call had a reference to. The
+*application* behavior was already correct (re-queried fresh, the right
+card/avatar were marked selected, and the real `join()` call carried
+the right persona) — only the test script's stale-reference check was
+wrong. Noted here so a future pass doesn't "fix" code that was never
+broken.
+
+**Practical note for anyone reloading this page after an edit:**
+`python3 -m http.server` sends no `Cache-Control` headers, so Chrome
+(and likely other browsers) can serve a stale cached copy of
+`index.html` on a plain reload. A hard refresh (Cmd+Shift+R) or cache-
+disabled reload is what actually picks up a fresh edit — this pass hit
+exactly that trap once before realizing it was cache, not a failed fix.
+
+**Not yet covered:** rounds 2–20, bankruptcy, and game-over states for
+the persona system specifically (Hustler's Side Hustle rate, Saver's
+discount, Builder's costs, and Gambler's variance were all verified
+earlier via direct CLI contract calls against the live second-generation
+contract — see the top-level README — but not yet exercised through
+this browser UI across a full run).

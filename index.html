@@ -269,6 +269,60 @@ h1 {
 .step:has(button:disabled) .step-index,
 .step:has(button:disabled) .step-hint { opacity: 0.6; }
 
+/* ---------- operator creation (persona + name + avatar) ---------- */
+.persona-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 10px; margin: 4px 0 2px; }
+.persona-card {
+  text-align: left; display: flex; flex-direction: column; gap: 5px;
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 12px 13px; cursor: pointer; min-height: auto;
+  transition: border-color 140ms ease, background 140ms ease, transform 80ms ease;
+}
+.persona-card:hover { border-color: rgba(73,230,164,0.35); }
+.persona-card:active { transform: scale(0.99); }
+.persona-card--selected { border-color: var(--accent); background: rgba(73,230,164,0.07); box-shadow: 0 0 0 1px rgba(73,230,164,0.25); }
+.persona-card-head { display: flex; align-items: center; gap: 8px; }
+.persona-card-icon { font-size: 1.05rem; line-height: 1; }
+.persona-card-name { font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; color: var(--fg); }
+.persona-card--selected .persona-card-name { color: var(--accent); }
+.persona-card-tagline { font-size: 0.74rem; color: var(--fg-faint); font-style: italic; }
+.persona-card-desc { font-size: 0.78rem; color: var(--fg-dim); line-height: 1.4; }
+.persona-card-radio {
+  margin-left: auto; width: 15px; height: 15px; border-radius: 50%; flex: none;
+  border: 1.5px solid var(--border); position: relative;
+}
+.persona-card--selected .persona-card-radio { border-color: var(--accent); }
+.persona-card--selected .persona-card-radio::after {
+  content: ""; position: absolute; inset: 2.5px; border-radius: 50%; background: var(--accent);
+}
+
+.operator-id-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 2px; }
+.operator-label { font-family: var(--font-display); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-faint); flex: none; }
+.operator-input {
+  font-family: var(--font-body); font-size: 0.86rem; color: var(--fg);
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 7px;
+  padding: 9px 11px; min-width: 160px; flex: 1 1 180px;
+}
+.operator-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.avatar-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+.avatar-opt {
+  font-size: 1.1rem; line-height: 1; min-height: 38px; width: 38px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 8px;
+}
+.avatar-opt--selected { border-color: var(--accent); background: rgba(73,230,164,0.1); }
+
+/* operator badge shown once in-game — reads the real on-chain persona
+   (state.persona from get_state), never just the client's local pick */
+.operator-badge {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 10px 13px; margin-bottom: 2px;
+}
+.operator-badge-avatar { font-size: 1.3rem; line-height: 1; }
+.operator-badge-name { font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; color: var(--fg); }
+.operator-badge-persona { font-size: 0.76rem; color: var(--fg-faint); }
+.operator-badge-persona strong { color: var(--accent); font-weight: 600; }
+
 button {
   font-family: var(--font-display); font-size: 0.88rem; font-weight: 600; letter-spacing: 0.01em;
   border-radius: 8px; border: 1px solid var(--border);
@@ -535,7 +589,7 @@ button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
 
     <div class="contract-chip">
       <span class="contract-chip-label">contract</span>
-      <span class="num contract-chip-id">CABDVHFVUJSNTWLHYWWSOWKIZS6OYFOSRLQNXPXI2OICFSHZCNMG4RAT</span>
+      <span class="num contract-chip-id" id="contractChipId"></span>
       <a id="contractLink" href="#" target="_blank" class="contract-chip-link">view on Stellar Expert →</a>
     </div>
 
@@ -572,11 +626,17 @@ button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
         <span class="step-index"><span class="step-index-num">3</span><span class="step-index-check" aria-hidden="true">✓</span></span>
         <div class="step-body">
           <div class="step-meta">
-            <span class="step-tag">Step 3 · join()</span>
+            <span class="step-tag">Step 3 · build your operator &amp; join()</span>
             <span class="step-state" aria-hidden="true"></span>
           </div>
+          <p class="step-hint">Pick a persona — a real economic trait enforced by the contract, locked in at <code>join()</code> and stored on-chain. Your name and avatar are cosmetic and stay in this browser.</p>
+          <div class="persona-grid" id="personaGrid" role="radiogroup" aria-label="Choose a persona"></div>
+          <div class="operator-id-row">
+            <label class="operator-label" for="operatorName">Operator name</label>
+            <input class="operator-input" id="operatorName" type="text" maxlength="24" placeholder="Operator" autocomplete="off">
+            <div class="avatar-picker" id="avatarPicker" role="radiogroup" aria-label="Choose an avatar"></div>
+          </div>
           <div class="row"><button class="action-btn" id="btnJoin" disabled>Enter the game</button></div>
-          <p class="step-hint">Signs and submits the first real transaction: <code>join()</code> on the live contract.</p>
         </div>
       </div>
       <div id="walletInfo" class="wallet-info"></div>
@@ -584,6 +644,7 @@ button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
 
     <div id="gamePanel" hidden>
       <div class="divider" aria-hidden="true"></div>
+      <div class="operator-badge" id="operatorBadge"></div>
       <div class="status-grid" id="statusGrid"></div>
       <div class="achv-shelf" id="achvShelf" aria-live="polite"></div>
       <div class="row" id="actionRow"></div>
@@ -628,13 +689,18 @@ button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
 <script type="module">
 import * as StellarSdk from "https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@17.4.0/+esm";
 
-const CONTRACT_ID = "CABDVHFVUJSNTWLHYWWSOWKIZS6OYFOSRLQNXPXI2OICFSHZCNMG4RAT";
+const CONTRACT_ID = "CBO4POPU3FQXXYE353LKO6KNHT2QJRZGOFDTQEKELS3H2ZZBNEPF3SOE";
 const RPC_URL = "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
 const FRIENDBOT_URL = "https://friendbot.stellar.org";
 
 document.getElementById("contractLink").href =
   `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`;
+// Was previously hardcoded in the HTML (drifted silently to a stale
+// contract ID the first time this page pointed at a new deployment,
+// since only .href above was ever kept in sync) -- driven from the same
+// CONTRACT_ID constant as the link now, so the two can't disagree again.
+document.getElementById("contractChipId").textContent = CONTRACT_ID;
 
 let keypair = null;
 let client = null;
@@ -644,6 +710,90 @@ const walletInfo = $("walletInfo");
 const statusGrid = $("statusGrid");
 const actionRow = $("actionRow");
 const txLog = $("txLog");
+
+// ---- operator creation: persona (real on-chain trait, enforced by the
+// contract's `Persona` enum — see lib.rs) + name/avatar (cosmetic, client-
+// only). Numbers below are copied from the deployed contract's own
+// constants, not invented for display — if the contract's persona math
+// ever changes, these labels have to move with it.
+const PERSONAS = [
+  { tag: "Classic", icon: "⬡", name: "Classic", tagline: "The original economy", desc: "No bonuses, no penalties. Stall 8, Business 24, Side Hustle +3, standard expenses." },
+  { tag: "Hustler", icon: "⚡", name: "Hustler", tagline: "Grind harder, earn more", desc: "Side Hustle pays +5 instead of +3. Everything else is the standard economy." },
+  { tag: "Saver", icon: "✺", name: "Saver", tagline: "Frugality pays off", desc: "Every round's living expenses are 1 cash lower — compounds over 20 rounds." },
+  { tag: "Builder", icon: "▣", name: "Builder", tagline: "Cheaper path to passive income", desc: "Stall costs 6 instead of 8. Business costs 18 instead of 24. Same payout." },
+  { tag: "Gambler", icon: "🎲", name: "Gambler", tagline: "High risk, high variance", desc: "Side Hustle is a coin flip: nothing, or +6. Same average as the flat rate." },
+];
+const AVATARS = ["🦅", "🦊", "🐺", "🦉", "🐢", "🦁", "🐙", "🦝"];
+const OPERATOR_KEY_PREFIX = "stormMoneyChainOperator:";
+
+let selectedPersona = PERSONAS[0].tag;
+let selectedAvatar = AVATARS[0];
+
+function renderPersonaGrid() {
+  const grid = $("personaGrid");
+  grid.innerHTML = PERSONAS.map((p) => `
+    <button type="button" class="persona-card${p.tag === selectedPersona ? " persona-card--selected" : ""}" data-persona="${p.tag}" role="radio" aria-checked="${p.tag === selectedPersona}">
+      <div class="persona-card-head">
+        <span class="persona-card-icon" aria-hidden="true">${p.icon}</span>
+        <span class="persona-card-name">${p.name}</span>
+        <span class="persona-card-radio" aria-hidden="true"></span>
+      </div>
+      <span class="persona-card-tagline">${p.tagline}</span>
+      <span class="persona-card-desc">${p.desc}</span>
+    </button>`).join("");
+  grid.querySelectorAll(".persona-card").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedPersona = btn.dataset.persona;
+      renderPersonaGrid();
+    });
+  });
+}
+
+function renderAvatarPicker() {
+  const picker = $("avatarPicker");
+  picker.innerHTML = AVATARS.map((a) => `
+    <button type="button" class="avatar-opt${a === selectedAvatar ? " avatar-opt--selected" : ""}" data-avatar="${a}" role="radio" aria-checked="${a === selectedAvatar}" aria-label="Avatar ${a}">${a}</button>`).join("");
+  picker.querySelectorAll(".avatar-opt").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedAvatar = btn.dataset.avatar;
+      renderAvatarPicker();
+    });
+  });
+}
+renderPersonaGrid();
+renderAvatarPicker();
+
+function operatorStorageKey(pubKey) { return OPERATOR_KEY_PREFIX + pubKey; }
+
+function saveOperatorProfile(pubKey) {
+  const profile = { name: $("operatorName").value.trim() || "Operator", avatar: selectedAvatar, persona: selectedPersona };
+  try { window.localStorage.setItem(operatorStorageKey(pubKey), JSON.stringify(profile)); } catch (e) { /* best-effort */ }
+  return profile;
+}
+
+function loadOperatorProfile(pubKey) {
+  try {
+    const raw = window.localStorage.getItem(operatorStorageKey(pubKey));
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* best-effort */ }
+  return null;
+}
+
+// Renders from the chain's own `state.persona`, not the client's local
+// selection — if they ever disagree, the chain wins (same principle the
+// rest of this page already applies to cash/round/etc).
+function renderOperatorBadge(state) {
+  const badge = $("operatorBadge");
+  if (!badge) return;
+  const profile = loadOperatorProfile(keypair.publicKey()) || { name: "Operator", avatar: AVATARS[0] };
+  const personaDef = PERSONAS.find((p) => p.tag === state.persona?.tag) || PERSONAS[0];
+  badge.innerHTML = `
+    <span class="operator-badge-avatar" aria-hidden="true">${profile.avatar}</span>
+    <span>
+      <span class="operator-badge-name">${profile.name}</span>
+      <span class="operator-badge-persona"> · <strong>${personaDef.name}</strong> — ${personaDef.tagline}</span>
+    </span>`;
+}
 
 // ---- audio (Web Audio API; procedurally synthesized, no external files) ----
 // Each tone is distinct because each real event it confirms is distinct: a
@@ -1075,8 +1225,23 @@ async function refreshState() {
     <div class="tile ${state.loans > 0 ? "tile--alert" : ""}"><span class="label">Loans</span><span class="value">${state.loans}</span></div>
     <div class="tile"><span class="label">Insured</span><span class="value ${state.insured ? "value--good" : "value--muted"}">${state.insured ? "Yes" : "No"}</span></div>`;
   renderActions(state);
+  renderOperatorBadge(state);
   Progression.sync(state); // additive: reacts to this already-unwrapped state, doesn't change it
   return state;
+}
+
+// Real per-persona rates, mirroring lib.rs's own constants exactly (see
+// PERSONAS above for the human-readable version of the same numbers) —
+// driven by state.persona (the chain's own answer), not the client's
+// local selection, so this can never show a rate that doesn't match what
+// take_action will actually do.
+function personaRates(personaTag) {
+  const isBuilder = personaTag === "Builder";
+  return {
+    stallCost: isBuilder ? 6 : 8,
+    businessCost: isBuilder ? 18 : 24,
+    hustleLabel: personaTag === "Hustler" ? "+5" : personaTag === "Gambler" ? "+0 or +6" : "+3",
+  };
 }
 
 function renderActions(state) {
@@ -1085,14 +1250,16 @@ function renderActions(state) {
     actionRow.innerHTML = `<div class="game-over"><p><strong>Game over.</strong> Final score: ${state.final_score}, final cash: ${state.bankrupt ? "—" : state.cash}${state.bankrupt ? " (bankrupt)" : ""}</p></div>`;
     return;
   }
+  const rates = personaRates(state.persona?.tag);
+  const actionCost = { stall: rates.stallCost, business: rates.businessCost };
   const buttons = [];
   if (state.awaiting_roll) {
     buttons.push(["Roll the Storm die 🎲", "roll"]);
   } else {
     if (state.actions_left > 0) {
-      buttons.push([`Buy Stall (8 → +1/rd)`, "stall"]);
-      buttons.push([`Buy Business (24 → +4/rd)`, "business"]);
-      buttons.push([`Side Hustle (+3)`, "hustle"]);
+      buttons.push([`Buy Stall (${rates.stallCost} → +1/rd)`, "stall"]);
+      buttons.push([`Buy Business (${rates.businessCost} → +4/rd)`, "business"]);
+      buttons.push([`Side Hustle (${rates.hustleLabel})`, "hustle"]);
     }
     buttons.push(["Take loan", "loan"]);
     buttons.push(["Repay loan", "repay"]);
@@ -1105,9 +1272,37 @@ function renderActions(state) {
     if (action === "roll") btn.classList.add("roll-btn");
     if (!state.awaiting_roll && (action === "stall" || action === "business" || action === "hustle")) btn.classList.add("primary", "buy-btn");
     if (action === "loan" || action === "repay" || action === "insure") btn.classList.add("fin-btn");
+    const cost = actionCost[action];
+    if (cost !== undefined && state.cash < cost) {
+      btn.disabled = true;
+      btn.title = `Need ${cost} cash — you have ${state.cash}. This action would be rejected by the contract.`;
+    }
     btn.addEventListener("click", () => handleAction(action));
     actionRow.appendChild(btn);
   }
+}
+
+// Maps the contract's #[contracterror] codes (lib.rs Error enum) to plain
+// text, since a rejected simulation surfaces as a raw HostError diagnostic
+// dump otherwise — informative to a Rust dev, noise to a player.
+const CONTRACT_ERROR_MESSAGES = {
+  1: "You've already joined this game.",
+  2: "You haven't joined yet.",
+  3: "This game is already over.",
+  4: "You're bankrupt — this game is over.",
+  5: "Roll the Storm die first this round.",
+  6: "You already rolled this round.",
+  7: "No actions left this round.",
+  8: "Not enough cash for that.",
+  9: "You've hit the max number of loans.",
+  10: "You don't have a loan to repay.",
+  11: "You're already insured.",
+};
+
+function friendlyError(message) {
+  const m = /Error\(Contract,\s*#(\d+)\)/.exec(message);
+  if (m && CONTRACT_ERROR_MESSAGES[m[1]]) return CONTRACT_ERROR_MESSAGES[m[1]];
+  return message;
 }
 
 async function handleAction(action) {
@@ -1143,7 +1338,7 @@ async function handleAction(action) {
     logLine(`${label} — ${explorerLink(sent.sendTransactionResponse?.hash ?? sent.getTransactionResponse?.txHash ?? "")}`, kind);
     ChainSFX.play("txConfirm");
   } catch (e) {
-    logLine(`Error: ${e.message}`, "error");
+    logLine(`Error: ${friendlyError(e.message)}`, "error");
     ChainSFX.play("error");
   }
   await refreshState();
@@ -1154,9 +1349,10 @@ $("btnJoin").addEventListener("click", async () => {
   $("btnJoin").textContent = "Entering…";
   try {
     Progression.load(keypair.publicKey()); // reset the achievement shelf for this disposable wallet
+    const profile = saveOperatorProfile(keypair.publicKey()); // cosmetic name/avatar, client-only
     client = await makeClient();
-    const sent = await call("join", { player: keypair.publicKey() });
-    logLine(`Joined — ${explorerLink(sent.sendTransactionResponse?.hash ?? "")}`, "join");
+    const sent = await call("join", { player: keypair.publicKey(), persona: { tag: selectedPersona, values: void 0 } });
+    logLine(`Joined as <strong>${profile.name}</strong> (${selectedPersona}) — ${explorerLink(sent.sendTransactionResponse?.hash ?? "")}`, "join");
     ChainSFX.play("joined");
     Progression.announceJoin(); // fires only after the real join tx above has confirmed
     $("btnJoin").closest(".step").classList.add("step--done");
