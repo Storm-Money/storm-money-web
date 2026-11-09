@@ -1368,9 +1368,8 @@ $("btnJoin").addEventListener("click", async () => {
 });
 
 // ---- leaderboard (reads the separate indexer/API service; never touches the chain) ----
-// Local preview only: the backend isn't deployed yet (see backend/README.md),
-// so this points at a locally-run instance. Swap for the deployed URL once one exists.
-const LEADERBOARD_API = "http://localhost:8745";
+// Deployed backend (Railway), see storm-money-backend's README.
+const LEADERBOARD_API = "https://backend-production-fb315.up.railway.app";
 
 function fmtScore(row) {
   if (row.status === "bankrupt") {
