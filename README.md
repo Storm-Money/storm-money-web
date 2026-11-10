@@ -790,3 +790,26 @@ discount, Builder's costs, and Gambler's variance were all verified
 earlier via direct CLI contract calls against the live second-generation
 contract — see the top-level README — but not yet exercised through
 this browser UI across a full run).
+
+## Split into index.html / style.css / app.js
+
+Everything above that refers to "`index.html`, all in one file" describes
+this client as it existed before this split — kept as-is rather than
+rewritten, since it's a log of what was true at the time, not a spec of
+the current file layout.
+
+The page had grown to one file holding markup, ~540 lines of CSS, and
+~840 lines of JS. Split along the same boundaries the `<style>`/`<script
+type="module">` tags already drew: `style.css` and `app.js` are now their
+own files, referenced from `index.html` via `<link rel="stylesheet">` and
+`<script type="module" src="app.js">`. Pure extraction, no behavior
+change — verified with `node --check app.js` and a brace-balance check on
+`style.css` before and after.
+
+One real follow-on fix this required: `server.js` only sent
+`Cache-Control: no-cache` on `.html` responses (see the "Practical note"
+above about `index.html` going stale otherwise). With the JS and CSS now
+separately cacheable files instead of inline in that same HTML response,
+the same staleness risk now applies to them too — extended the no-cache
+header to `.js` and `.css` as well so a deploy can't leave a browser
+running old app logic against a new page.
