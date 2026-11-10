@@ -355,6 +355,7 @@ button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
   padding: 4px 9px; min-height: auto; border-radius: 5px; background: var(--bg-elev-3); color: var(--fg-dim);
 }
 .key-warning { font-size: 0.78rem; color: var(--danger); }
+.key-hint { font-size: 0.78rem; color: var(--fg-faint); }
 
 /* ---------- status grid ---------- */
 .divider { border-top: 1px dashed var(--border); margin: 2px 0; }
@@ -725,6 +726,21 @@ const PERSONAS = [
 ];
 const AVATARS = ["🦅", "🦊", "🐺", "🦉", "🐢", "🦁", "🐙", "🦝"];
 const OPERATOR_KEY_PREFIX = "stormMoneyChainOperator:";
+// Plaintext is fine here: this key only ever controls disposable testnet
+// play-money, and the whole point of this game is that nothing is hidden.
+// Without this, closing or reloading the tab permanently loses the
+// account -- there's no server-side account recovery, since the chain
+// itself is the only source of truth and it only knows a public key.
+const SECRET_KEY_STORAGE = "stormMoneyChainSecret";
+function saveSecretKey(secret) {
+  try { window.localStorage.setItem(SECRET_KEY_STORAGE, secret); } catch (e) { /* best-effort */ }
+}
+function loadSecretKey() {
+  try { return window.localStorage.getItem(SECRET_KEY_STORAGE); } catch (e) { return null; }
+}
+function clearSecretKey() {
+  try { window.localStorage.removeItem(SECRET_KEY_STORAGE); } catch (e) { /* best-effort */ }
+}
 
 let selectedPersona = PERSONAS[0].tag;
 let selectedAvatar = AVATARS[0];
@@ -1147,22 +1163,21 @@ function explorerLink(hash) {
   return `<a class="tx-link" href="https://stellar.expert/explorer/testnet/tx/${hash}" target="_blank">${hash.slice(0, 10)}…</a>`;
 }
 
-$("btnGenerate").addEventListener("click", () => {
-  keypair = StellarSdk.Keypair.random();
-  ChainSFX.play("keygen");
+function renderWalletInfo(kp) {
   walletInfo.innerHTML = `
     <div class="key-row">
       <span class="key-label">Public</span>
-      <span class="num key-value">${keypair.publicKey()}</span>
-      <button type="button" class="copy-btn" data-copy="${keypair.publicKey()}">copy</button>
+      <span class="num key-value">${kp.publicKey()}</span>
+      <button type="button" class="copy-btn" data-copy="${kp.publicKey()}">copy</button>
     </div>
     <div class="key-row key-row--secret">
       <span class="key-label">Secret</span>
-      <span class="num key-value">${keypair.secret()}</span>
-      <button type="button" class="copy-btn" data-copy="${keypair.secret()}">copy</button>
+      <span class="num key-value">${kp.secret()}</span>
+      <button type="button" class="copy-btn" data-copy="${kp.secret()}">copy</button>
     </div>
-    <p class="key-warning">testnet only — we show this key on purpose, so you can see nothing is hidden; never do this with real funds on mainnet</p>`;
-  walletInfo.querySelectorAll(".copy-btn").forEach((b) => {
+    <p class="key-warning">testnet only — we show this key on purpose, so you can see nothing is hidden; never do this with real funds on mainnet</p>
+    <p class="key-hint">Saved in this browser, so reloading the page won't lose your run. <button type="button" class="copy-btn" id="btnForgetKey">forget this account</button></p>`;
+  walletInfo.querySelectorAll(".copy-btn[data-copy]").forEach((b) => {
     b.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(b.dataset.copy);
@@ -1172,9 +1187,72 @@ $("btnGenerate").addEventListener("click", () => {
       } catch (e) { /* clipboard unavailable — not fatal */ }
     });
   });
+  $("btnForgetKey").addEventListener("click", forgetAccount);
+}
+
+function forgetAccount() {
+  clearSecretKey();
+  keypair = null;
+  client = null;
+  walletInfo.innerHTML = "";
+  $("setupPanel").style.display = "";
+  $("gamePanel").hidden = true;
+  document.querySelectorAll(".step").forEach((s) => s.classList.remove("step--done"));
+  $("btnGenerate").disabled = false;
+  $("btnFund").disabled = true;
+  $("btnFund").textContent = "Get funded";
+  $("btnJoin").disabled = true;
+  $("btnJoin").textContent = "Enter the game";
+  logLine("Forgot this account — generate a new identity to start over.", "info");
+}
+
+$("btnGenerate").addEventListener("click", () => {
+  keypair = StellarSdk.Keypair.random();
+  saveSecretKey(keypair.secret());
+  ChainSFX.play("keygen");
+  renderWalletInfo(keypair);
   $("btnGenerate").closest(".step").classList.add("step--done");
   $("btnFund").disabled = false;
 });
+
+// Resumes a saved identity on page load so a refresh or a closed tab
+// doesn't strand the player with no way back into their own run — the
+// chain is the only source of truth on join state, so this asks it
+// directly rather than guessing from anything cached client-side.
+async function tryRestoreSession() {
+  const secret = loadSecretKey();
+  if (!secret) return;
+  try {
+    keypair = StellarSdk.Keypair.fromSecret(secret);
+  } catch (e) {
+    clearSecretKey(); // corrupted value -- don't get permanently stuck on it
+    return;
+  }
+  renderWalletInfo(keypair);
+  $("btnGenerate").disabled = true;
+  $("btnGenerate").closest(".step").classList.add("step--done");
+  logLine(`Restored your saved identity from this browser.`, "info");
+  try {
+    client = await makeClient();
+    Progression.load(keypair.publicKey()); // restores this wallet's own achievement shelf, not a fresh one
+    await refreshState(); // throws if not funded yet, or funded but never joined
+    $("btnFund").closest(".step").classList.add("step--done");
+    $("btnJoin").closest(".step").classList.add("step--done");
+    $("setupPanel").style.display = "none";
+    $("gamePanel").hidden = false;
+  } catch (e) {
+    const msg = friendlyError(e.message || "");
+    if (msg === "You haven't joined yet.") {
+      $("btnFund").textContent = "Funded ✓";
+      $("btnFund").disabled = true;
+      $("btnFund").closest(".step").classList.add("step--done");
+      $("btnJoin").disabled = false;
+    } else {
+      $("btnFund").disabled = false;
+      logLine(`This saved identity isn't funded yet — click "Get funded" to continue. (${msg})`, "error");
+    }
+  }
+}
 
 $("btnFund").addEventListener("click", async () => {
   $("btnFund").disabled = true;
@@ -1401,6 +1479,8 @@ function renderLbStats(stats) {
   const pct = (x) => (x === null || x === undefined ? "—" : `${Math.round(x * 100)}%`);
   const num = (x) => (x === null || x === undefined ? "—" : x);
   $("lbStats").innerHTML = `
+    <div class="tile"><span class="label">Joined</span><span class="value">${num(stats.joins_total)}</span></div>
+    <div class="tile"><span class="label">Completion rate</span><span class="value">${pct(stats.completion_rate)}</span></div>
     <div class="tile"><span class="label">Finished</span><span class="value">${stats.games_total}</span></div>
     <div class="tile"><span class="label">In progress</span><span class="value">${stats.games_in_progress}</span></div>
     <div class="tile"><span class="label">Bankrupt rate</span><span class="value">${pct(stats.bankrupt_rate)}</span></div>
@@ -1445,6 +1525,7 @@ async function refreshLeaderboard() {
 
 $("btnLbRefresh").addEventListener("click", () => void refreshLeaderboard());
 void refreshLeaderboard();
+void tryRestoreSession();
 </script>
 </body>
 </html>
