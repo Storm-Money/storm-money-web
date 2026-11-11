@@ -244,7 +244,7 @@ framing.
    `"...a disposable Ed25519 keypair (the one-time login key this game
    uses to sign for you) in your browser..."`.
 3. Leaderboard card's dev-internal detail ("a contract gap, not an
-   indexer bug — see `backend/README.md`") moved out of
+   indexer bug — see `storm-money-backend`'s README") moved out of
    the main paragraph into a `<details>`/`<summary>` ("why?") so a
    first-time player isn't made to parse internal bug taxonomy; the
    visible sentence is now just "Loan/repay/insure actions don't appear
@@ -806,10 +806,75 @@ own files, referenced from `index.html` via `<link rel="stylesheet">` and
 change — verified with `node --check app.js` and a brace-balance check on
 `style.css` before and after.
 
-One real follow-on fix this required: `server.js` only sent
-`Cache-Control: no-cache` on `.html` responses (see the "Practical note"
+One real follow-on fix this required: the static server used at the
+time only sent `Cache-Control: no-cache` on `.html` responses (see the "Practical note"
 above about `index.html` going stale otherwise). With the JS and CSS now
 separately cacheable files instead of inline in that same HTML response,
 the same staleness risk now applies to them too — extended the no-cache
 header to `.js` and `.css` as well so a deploy can't leave a browser
 running old app logic against a new page.
+
+## One-click rounds — 2026-11-11
+
+The live API said what the contract couldn't: `games_in_progress: 5`,
+`games_total: 0`. Five addresses had rolled at least once; none had
+finished a run. A 20-round game is 61+ real signed transactions, one
+click and one confirmation each, so this pass attacked the click count
+without removing the thing the page exists to demonstrate.
+
+**What changed.** A round plan (`#roundPlan`) now appears above the
+action row. The player picks up to two actions *before* rolling; one
+"Play round" click then signs `roll_and_pay` followed by each chosen
+`take_action`, in order, logging each transaction separately as it
+confirms. Nothing is pre-selected and the cap comes from the chain's own
+`actions_left`, so the decision stays the player's. It is not an
+autoplay bot: if the roll makes a chosen action unaffordable (Emergency,
+Market Dip), the contract rejects that step and the sequence stops with
+the same friendly `Error(#8)` message the manual path shows; later
+actions in the plan are not attempted.
+
+**What was deliberately kept.** The individual buttons below are still
+there, now under an "or sign each step yourself" label. Signing every
+step by hand is this build's whole argument, so it stays available;
+it just stops being the only way through twenty rounds. `makeClient()`,
+`call()`, and the signing path are untouched — the planner calls the
+same two helpers the buttons do.
+
+**Also in this pass:** the hardcoded prod API URL moved into a single
+`CONFIG` block, overridable from the query string (`?api=`, `?rpc=`,
+`?contract=`, `?friendbot=`) so a local client can point at a local
+backend without editing and redeploying the file. The leaderboard pill
+no longer claims "local backend" when it is reading the deployed one.
+
+**Verification — real testnet, real browser, no mocks.** From-scratch
+CDP driver (Node 26 native `WebSocket`/`fetch`, no dependencies) against
+headless Chrome, same approach as the earlier passes; local
+`node server.js` on :8743. Fresh identity → Friendbot → Hustler persona
+→ `join()` → plan `stall` + `hustle` → one click. Observed:
+
+- Round 1 plan rendered three chips with Hustler's real rates
+  (`Buy Stall 8 → +1/rd`, `Buy Business 24 → +4/rd`, `Side Hustle +5`);
+  third chip correctly disabled once two were chosen; CTA changed from
+  `▶ Play round · 1 tx` to `▶ Play round · 3 txs`.
+- After the click: status grid `Round 2/20, Cash 10, Stalls 1`, four log
+  lines with four distinct real hashes (`join`, `Rolled: Calm`, stall,
+  hustle). The arithmetic is the contract's: 10 + 8 salary − 5 expenses
+  = 13, − 8 stall = 5, + 5 Hustler hustle = 10.
+- Zero `Runtime.exceptionThrown` and zero `console.error` entries for
+  the whole run.
+
+Screenshots (`p0-01-first-paint` → `p0-06-round-played`) exist in that
+session's scratchpad only, not in the repo.
+
+**Not covered here:** a full 20-round run, bankruptcy/game-over via the
+new plan path, and mobile viewport layout. The planner's failure path
+was reasoned from the contract's error codes, not exercised live in this
+pass.
+
+**Deployment.** The host for this client is wired to this repository, so
+merging this change publishes it: the host rebuilds `main` and serves the
+four files here. The page above was verified locally before merging; the
+same files are what the host serves, with the deployed indexer as the
+leaderboard source. The host's domain isn't recorded in this repo, so the
+post-merge check is to open that domain and confirm the round plan
+renders -- a check this pass cannot do from here.
