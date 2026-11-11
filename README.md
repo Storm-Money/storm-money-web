@@ -873,9 +873,8 @@ pass.
 
 **Deployment.** The host for this client is wired to this repository, so
 merging this change publishes it: the host rebuilds `main` and serves the
-four files here. The page above was verified from a local `server.js`
-copy before merging; the same files are what the host serves, with the
-deployed indexer as the leaderboard source. This repository has no public
-URL of its own recorded, so the post-merge check is "open the domain the
-host serves and confirm the round plan renders" rather than a URL this
-pass can claim to have visited.
+four files here. The page above was verified locally before merging; the
+same files are what the host serves, with the deployed indexer as the
+leaderboard source. The host's domain isn't recorded in this repo, so the
+post-merge check is to open that domain and confirm the round plan
+renders -- a check this pass cannot do from here.
