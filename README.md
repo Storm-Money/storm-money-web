@@ -813,3 +813,70 @@ separately cacheable files instead of inline in that same HTML response,
 the same staleness risk now applies to them too — extended the no-cache
 header to `.js` and `.css` as well so a deploy can't leave a browser
 running old app logic against a new page.
+
+## One-click rounds — 2026-11-11
+
+The live API said what the contract couldn't: `games_in_progress: 5`,
+`games_total: 0`. Five addresses had rolled at least once; none had
+finished a run. A 20-round game is 61+ real signed transactions, one
+click and one confirmation each, so this pass attacked the click count
+without removing the thing the page exists to demonstrate.
+
+**What changed.** A round plan (`#roundPlan`) now appears above the
+action row. The player picks up to two actions *before* rolling; one
+"Play round" click then signs `roll_and_pay` followed by each chosen
+`take_action`, in order, logging each transaction separately as it
+confirms. Nothing is pre-selected and the cap comes from the chain's own
+`actions_left`, so the decision stays the player's. It is not an
+autoplay bot: if the roll makes a chosen action unaffordable (Emergency,
+Market Dip), the contract rejects that step and the sequence stops with
+the same friendly `Error(#8)` message the manual path shows; later
+actions in the plan are not attempted.
+
+**What was deliberately kept.** The individual buttons below are still
+there, now under an "or sign each step yourself" label. Signing every
+step by hand is this build's whole argument, so it stays available;
+it just stops being the only way through twenty rounds. `makeClient()`,
+`call()`, and the signing path are untouched — the planner calls the
+same two helpers the buttons do.
+
+**Also in this pass:** the hardcoded prod API URL moved into a single
+`CONFIG` block, overridable from the query string (`?api=`, `?rpc=`,
+`?contract=`, `?friendbot=`) so a local client can point at a local
+backend without editing and redeploying the file. The leaderboard pill
+no longer claims "local backend" when it is reading the deployed one.
+
+**Verification — real testnet, real browser, no mocks.** From-scratch
+CDP driver (Node 26 native `WebSocket`/`fetch`, no dependencies) against
+headless Chrome, same approach as the earlier passes; local
+`node server.js` on :8743. Fresh identity → Friendbot → Hustler persona
+→ `join()` → plan `stall` + `hustle` → one click. Observed:
+
+- Round 1 plan rendered three chips with Hustler's real rates
+  (`Buy Stall 8 → +1/rd`, `Buy Business 24 → +4/rd`, `Side Hustle +5`);
+  third chip correctly disabled once two were chosen; CTA changed from
+  `▶ Play round · 1 tx` to `▶ Play round · 3 txs`.
+- After the click: status grid `Round 2/20, Cash 10, Stalls 1`, four log
+  lines with four distinct real hashes (`join`, `Rolled: Calm`, stall,
+  hustle). The arithmetic is the contract's: 10 + 8 salary − 5 expenses
+  = 13, − 8 stall = 5, + 5 Hustler hustle = 10.
+- Zero `Runtime.exceptionThrown` and zero `console.error` entries for
+  the whole run.
+
+Screenshots (`p0-01-first-paint` → `p0-06-round-played`) exist in that
+session's scratchpad only, not in the repo.
+
+**Not covered here:** a full 20-round run, bankruptcy/game-over via the
+new plan path, and mobile viewport layout. The planner's failure path
+was reasoned from the contract's error codes, not exercised live in this
+pass.
+
+**Deployment status.** The page is verified locally. This split repo is
+static-only; the deploy scaffolding (`server.js`, `package.json`,
+`railway.json` with an explicit `node server.js` start command) lives in
+the monorepo's `web/` directory. Attempting `railway init` against this
+source returned `Free plan resource provision limit exceeded` on the
+account used here, and the project hosting the deployed backend is not
+visible to that account, so no new public URL could be created from this
+pass. Whoever owns the deployment should apply this change and confirm
+the host picked it up.

@@ -1,9 +1,24 @@
 import * as StellarSdk from "https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@17.4.0/+esm";
 
-const CONTRACT_ID = "CBO4POPU3FQXXYE353LKO6KNHT2QJRZGOFDTQEKELS3H2ZZBNEPF3SOE";
-const RPC_URL = "https://soroban-testnet.stellar.org";
+// Deployment config lives in one place, overridable from the query string
+// so the same static build can point at a local backend
+// (?api=http://localhost:8080) or a different RPC without editing and
+// redeploying. A hardcoded prod URL that no one remembers to update is
+// exactly the drift this file has already been bitten by once (see the
+// contract-ID chip note below).
+const CONFIG = {
+  contractId: "CBO4POPU3FQXXYE353LKO6KNHT2QJRZGOFDTQEKELS3H2ZZBNEPF3SOE",
+  rpcUrl: "https://soroban-testnet.stellar.org",
+  friendbotUrl: "https://friendbot.stellar.org",
+  leaderboardApi: "https://backend-production-fb315.up.railway.app",
+};
+const query = new URLSearchParams(window.location.search);
+const override = (key, fallback) => (query.get(key) || fallback).replace(/\/+$/, "");
+const CONTRACT_ID = override("contract", CONFIG.contractId);
+const RPC_URL = override("rpc", CONFIG.rpcUrl);
+const FRIENDBOT_URL = override("friendbot", CONFIG.friendbotUrl);
+const LEADERBOARD_API = override("api", CONFIG.leaderboardApi);
 const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
-const FRIENDBOT_URL = "https://friendbot.stellar.org";
 
 document.getElementById("contractLink").href =
   `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`;
@@ -20,7 +35,19 @@ const $ = (id) => document.getElementById(id);
 const walletInfo = $("walletInfo");
 const statusGrid = $("statusGrid");
 const actionRow = $("actionRow");
+const roundPlanEl = $("roundPlan");
+const actionHintEl = $("actionHint");
 const txLog = $("txLog");
+
+// True while a real transaction sequence is in flight. Re-renders during a
+// plan would otherwise hand back fresh, enabled buttons mid-flight.
+let busy = false;
+// The round planner's selection, scoped to one round (reset whenever the
+// round number moves) and never pre-filled — the action choice stays the
+// player's.
+let plannedActions = [];
+let plannedRound = null;
+let latestState = null;
 
 // ---- operator creation: persona (real on-chain trait, enforced by the
 // contract's `Persona` enum — see lib.rs) + name/avatar (cosmetic, client-
@@ -504,6 +531,10 @@ function forgetAccount() {
   clearSecretKey();
   keypair = null;
   client = null;
+  latestState = null;
+  plannedActions = [];
+  plannedRound = null;
+  if (roundPlanEl) { roundPlanEl.hidden = true; roundPlanEl.innerHTML = ""; }
   walletInfo.innerHTML = "";
   $("setupPanel").style.display = "";
   $("gamePanel").hidden = true;
@@ -613,8 +644,10 @@ async function refreshState() {
     <div class="tile ${state.loans > 0 ? "tile--alert" : ""}"><span class="label">Loans</span><span class="value">${state.loans}</span></div>
     <div class="tile"><span class="label">Insured</span><span class="value ${state.insured ? "value--good" : "value--muted"}">${state.insured ? "Yes" : "No"}</span></div>`;
   renderActions(state);
+  renderRoundPlan(state);
   renderOperatorBadge(state);
   Progression.sync(state); // additive: reacts to this already-unwrapped state, doesn't change it
+  latestState = state;
   return state;
 }
 
@@ -634,6 +667,7 @@ function personaRates(personaTag) {
 
 function renderActions(state) {
   actionRow.innerHTML = "";
+  if (actionHintEl) actionHintEl.hidden = state.game_over;
   if (state.game_over) {
     actionRow.innerHTML = `<div class="game-over"><p><strong>Game over.</strong> Final score: ${state.final_score}, final cash: ${state.bankrupt ? "—" : state.cash}${state.bankrupt ? " (bankrupt)" : ""}</p></div>`;
     return;
@@ -665,8 +699,121 @@ function renderActions(state) {
       btn.disabled = true;
       btn.title = `Need ${cost} cash — you have ${state.cash}. This action would be rejected by the contract.`;
     }
+    if (busy) btn.disabled = true;
     btn.addEventListener("click", () => handleAction(action));
     actionRow.appendChild(btn);
+  }
+}
+
+// ---- one-click round planner ------------------------------------------
+// A 20-round run is 61+ signed transactions. Doing that one click at a
+// time is why the live API shows in-progress games but no finished ones,
+// so this lets the player choose a round's actions up front and sign the
+// whole round in one click. It does not automate the decision: nothing is
+// pre-selected, and the cap is the contract's own actions_left. Each step
+// is still a separate, real, individually-logged transaction — the lesson
+// stays, the 60 taps don't. If the roll changes what's affordable, the
+// contract rejects that step and the sequence stops with the same friendly
+// error the manual path shows; it never silently skips an action.
+function planSlotCap(state) {
+  return state.awaiting_roll ? 2 : state.actions_left;
+}
+
+function renderRoundPlan(state) {
+  if (!roundPlanEl) return;
+
+  // Moving into a new round invalidates the previous round's plan.
+  if (state.round !== plannedRound) {
+    plannedRound = state.round;
+    plannedActions = [];
+  }
+
+  const cap = planSlotCap(state);
+  if (state.game_over || cap === 0) {
+    roundPlanEl.hidden = true;
+    roundPlanEl.innerHTML = "";
+    return;
+  }
+
+  const rates = personaRates(state.persona?.tag);
+  const defs = [
+    { key: "stall", label: "Buy Stall", note: `${rates.stallCost} → +1/rd` },
+    { key: "business", label: "Buy Business", note: `${rates.businessCost} → +4/rd` },
+    { key: "hustle", label: "Side Hustle", note: `${rates.hustleLabel} now` },
+  ];
+  const chips = defs
+    .map((d) => {
+      const selected = plannedActions.includes(d.key);
+      const full = plannedActions.length >= cap && !selected;
+      return `<button type="button" class="plan-chip${selected ? " plan-chip--selected" : ""}" data-plan="${d.key}" aria-pressed="${selected}"${full || busy ? " disabled" : ""}>
+        <span class="plan-chip-name">${selected ? "✓ " : ""}${d.label}</span>
+        <span class="plan-chip-note">${d.note}</span>
+      </button>`;
+    })
+    .join("");
+  const stepCount = (state.awaiting_roll ? 1 : 0) + plannedActions.length;
+  const verb = state.awaiting_roll ? "Play round" : "Finish round";
+  const head = state.awaiting_roll
+    ? `Round ${state.round} plan`
+    : `Round ${state.round} · ${state.actions_left} action${state.actions_left === 1 ? "" : "s"} left`;
+
+  roundPlanEl.hidden = false;
+  roundPlanEl.innerHTML = `
+    <div class="round-plan-head">
+      <span class="round-plan-title">${head}</span>
+      <span class="round-plan-meta">${plannedActions.length}/${cap} chosen</span>
+    </div>
+    <div class="plan-chips">${chips}</div>
+    <div class="row">
+      <button type="button" class="primary action-btn play-round-btn" id="btnPlayRound"${busy ? " disabled" : ""}>▶ ${verb} · ${stepCount} tx${stepCount === 1 ? "" : "s"}</button>
+    </div>
+    <p class="plan-hint">Choose up to <strong>${cap}</strong> action${cap === 1 ? "" : "s"}${state.awaiting_roll ? " before rolling" : ""}; one click signs the roll${plannedActions.length ? " and each chosen action" : " only"} as real transactions. Prefer to sign each step yourself? Use the buttons below.</p>`;
+
+  roundPlanEl.querySelectorAll(".plan-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.plan;
+      if (plannedActions.includes(key)) plannedActions = plannedActions.filter((k) => k !== key);
+      else if (plannedActions.length < cap) plannedActions.push(key);
+      renderRoundPlan(state);
+    });
+  });
+  $("btnPlayRound").addEventListener("click", () => void playRound());
+}
+
+async function playRound() {
+  if (busy || !latestState) return;
+  const player = keypair.publicKey();
+  const plan = plannedActions.slice();
+  const start = latestState;
+
+  busy = true;
+  renderRoundPlan(start);
+  renderActions(start);
+  try {
+    if (start.awaiting_roll) {
+      const sent = await call("roll_and_pay", { player });
+      const tag = sent.result.value.tag;
+      logLine(`Rolled: <strong>${tag}</strong> — ${explorerLink(txHash(sent))}`, "action");
+      Progression.noteRoll(tag);
+      ChainSFX.play("txConfirm");
+    }
+    let current = await refreshState();
+    for (const action of plan) {
+      if (current.game_over || current.actions_left <= 0) break;
+      const sent = await call("take_action", { player, action: actionEnumFor(action) });
+      logLine(`Action: <strong>${action}</strong> — ${explorerLink(txHash(sent))}`, "action");
+      ChainSFX.play("txConfirm");
+      current = await refreshState();
+    }
+  } catch (e) {
+    // The plan stops at the first rejected step; the player sees exactly
+    // which one failed and why, then can re-plan the rest of the round.
+    logLine(`Error: ${friendlyError(e.message)}`, "error");
+    ChainSFX.play("error");
+  } finally {
+    busy = false;
+    plannedActions = [];
+    await refreshState().catch(() => {});
   }
 }
 
@@ -693,7 +840,21 @@ function friendlyError(message) {
   return message;
 }
 
+// One place for the two things every call site needs to pull out of a
+// sent-transaction response, so a hash or an enum tag can't be read two
+// different ways in two different handlers.
+function txHash(sent) {
+  return sent.sendTransactionResponse?.hash ?? sent.getTransactionResponse?.txHash ?? "";
+}
+
+function actionEnumFor(action) {
+  const tag = action === "stall" ? "BuyStall" : action === "business" ? "BuyBusiness" : "SideHustle";
+  return { tag, values: void 0 };
+}
+
 async function handleAction(action) {
+  if (busy) return;
+  busy = true;
   actionRow.querySelectorAll("button").forEach((b) => (b.disabled = true));
   try {
     const player = keypair.publicKey();
@@ -704,10 +865,7 @@ async function handleAction(action) {
       kind = "action";
       Progression.noteRoll(sent.result.value.tag); // reads the same unwrapped tag, doesn't re-unwrap anything
     } else if (action === "stall" || action === "business" || action === "hustle") {
-      const actionEnum = action === "stall" ? { tag: "BuyStall", values: void 0 }
-        : action === "business" ? { tag: "BuyBusiness", values: void 0 }
-        : { tag: "SideHustle", values: void 0 };
-      sent = await call("take_action", { player, action: actionEnum });
+      sent = await call("take_action", { player, action: actionEnumFor(action) });
       label = `Action: <strong>${action}</strong>`;
       kind = "action";
     } else if (action === "loan") {
@@ -723,13 +881,14 @@ async function handleAction(action) {
       label = "Bought insurance";
       kind = "fin";
     }
-    logLine(`${label} — ${explorerLink(sent.sendTransactionResponse?.hash ?? sent.getTransactionResponse?.txHash ?? "")}`, kind);
+    logLine(`${label} — ${explorerLink(txHash(sent))}`, kind);
     ChainSFX.play("txConfirm");
   } catch (e) {
     logLine(`Error: ${friendlyError(e.message)}`, "error");
     ChainSFX.play("error");
   }
-  await refreshState();
+  busy = false;
+  await refreshState().catch(() => {});
 }
 
 $("btnJoin").addEventListener("click", async () => {
@@ -737,10 +896,12 @@ $("btnJoin").addEventListener("click", async () => {
   $("btnJoin").textContent = "Entering…";
   try {
     Progression.load(keypair.publicKey()); // reset the achievement shelf for this disposable wallet
+    plannedActions = [];
+    plannedRound = null;
     const profile = saveOperatorProfile(keypair.publicKey()); // cosmetic name/avatar, client-only
     client = await makeClient();
     const sent = await call("join", { player: keypair.publicKey(), persona: { tag: selectedPersona, values: void 0 } });
-    logLine(`Joined as <strong>${profile.name}</strong> (${selectedPersona}) — ${explorerLink(sent.sendTransactionResponse?.hash ?? "")}`, "join");
+    logLine(`Joined as <strong>${profile.name}</strong> (${selectedPersona}) — ${explorerLink(txHash(sent))}`, "join");
     ChainSFX.play("joined");
     Progression.announceJoin(); // fires only after the real join tx above has confirmed
     $("btnJoin").closest(".step").classList.add("step--done");
@@ -756,8 +917,9 @@ $("btnJoin").addEventListener("click", async () => {
 });
 
 // ---- leaderboard (reads the separate indexer/API service; never touches the chain) ----
-// Deployed backend (Railway), see storm-money-backend's README.
-const LEADERBOARD_API = "https://backend-production-fb315.up.railway.app";
+// Base URL comes from CONFIG.leaderboardApi at the top of this file
+// (overridable with ?api=...). Deployed backend, see
+// storm-money-backend's README.
 
 function fmtScore(row) {
   if (row.status === "bankrupt") {
@@ -816,16 +978,16 @@ async function refreshLeaderboard() {
     const stats = await statsRes.json();
     renderLeaderboard(lb.leaderboard);
     renderLbStats(stats);
-    pill.textContent = "live · local backend";
+    pill.textContent = "live · indexer";
     pill.className = "pill pill--live";
     dot.className = "dot dot--live";
   } catch (e) {
     pill.textContent = "backend offline";
     pill.className = "pill pill--offline";
     dot.className = "dot dot--archive";
-    $("lbList").innerHTML = `<div class="lb-empty">Can't reach the leaderboard backend at ${LEADERBOARD_API}. Start it with
+    $("lbList").innerHTML = `<div class="lb-empty">Can't reach the indexer API at <code>${LEADERBOARD_API}</code>. If you're running this locally, start it with
       <code>cd backend && npm run start</code> (needs Postgres + <code>npm run migrate</code> first —
-      see that directory's README) and refresh.</div>`;
+      see that directory's README), then refresh.</div>`;
     $("lbStats").innerHTML = "";
   } finally {
     btn.disabled = false;

@@ -331,6 +331,39 @@ button.fin-btn { font-size: 0.82rem; opacity: 0.88; }
 
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
+/* ---------- round plan ----------
+   Pre-select a round's actions, then one click signs the roll plus each
+   chosen action in sequence. Added because a full run is 61+ manual
+   clicks, which is the main drop-off: players join (the live API shows
+   in-progress games but zero finished ones) and never finish. The
+   granular buttons below are deliberately kept, not replaced — signing
+   every step yourself is the pedagogical point of this build, so it
+   stays available; it just stops being the only way through 20 rounds.
+   Every tx in the plan is still a real signed transaction and still
+   appears individually in the tx log. */
+.round-plan {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg-elev-2); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 12px 14px;
+}
+.round-plan-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.round-plan-title { font-family: var(--font-display); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); }
+.round-plan-meta { font-family: var(--font-mono); font-size: 0.72rem; color: var(--fg-faint); }
+.plan-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 9px 12px; border-radius: 8px; background: var(--bg-elev-3);
+  border: 1px solid var(--border); text-align: left;
+}
+.plan-chip-name { font-family: var(--font-display); font-size: 0.8rem; font-weight: 600; color: var(--fg); }
+.plan-chip-note { font-family: var(--font-mono); font-size: 0.68rem; color: var(--fg-faint); }
+.plan-chip--selected { border-color: var(--accent); background: rgba(73,230,164,0.08); box-shadow: 0 0 0 1px rgba(73,230,164,0.22); }
+.plan-chip--selected .plan-chip-name { color: var(--accent); }
+.plan-chip:disabled { opacity: 0.4; }
+.play-round-btn { align-self: flex-start; }
+.plan-hint { font-size: 0.78rem; color: var(--fg-faint); }
+.plan-hint strong { color: var(--fg-dim); font-weight: 600; }
+
 /* wallet key reveal */
 .wallet-info { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .key-row {
