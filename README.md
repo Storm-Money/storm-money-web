@@ -244,7 +244,7 @@ framing.
    `"...a disposable Ed25519 keypair (the one-time login key this game
    uses to sign for you) in your browser..."`.
 3. Leaderboard card's dev-internal detail ("a contract gap, not an
-   indexer bug — see `backend/README.md`") moved out of
+   indexer bug — see `storm-money-backend`'s README") moved out of
    the main paragraph into a `<details>`/`<summary>` ("why?") so a
    first-time player isn't made to parse internal bug taxonomy; the
    visible sentence is now just "Loan/repay/insure actions don't appear
@@ -806,8 +806,8 @@ own files, referenced from `index.html` via `<link rel="stylesheet">` and
 change — verified with `node --check app.js` and a brace-balance check on
 `style.css` before and after.
 
-One real follow-on fix this required: `server.js` only sent
-`Cache-Control: no-cache` on `.html` responses (see the "Practical note"
+One real follow-on fix this required: the static server used at the
+time only sent `Cache-Control: no-cache` on `.html` responses (see the "Practical note"
 above about `index.html` going stale otherwise). With the JS and CSS now
 separately cacheable files instead of inline in that same HTML response,
 the same staleness risk now applies to them too — extended the no-cache
@@ -871,12 +871,11 @@ new plan path, and mobile viewport layout. The planner's failure path
 was reasoned from the contract's error codes, not exercised live in this
 pass.
 
-**Deployment status.** The page is verified locally. This split repo is
-static-only; the deploy scaffolding (`server.js`, `package.json`,
-`railway.json` with an explicit `node server.js` start command) lives in
-the monorepo's `web/` directory. Attempting `railway init` against this
-source returned `Free plan resource provision limit exceeded` on the
-account used here, and the project hosting the deployed backend is not
-visible to that account, so no new public URL could be created from this
-pass. Whoever owns the deployment should apply this change and confirm
-the host picked it up.
+**Deployment.** The host for this client is wired to this repository, so
+merging this change publishes it: the host rebuilds `main` and serves the
+four files here. The page above was verified from a local `server.js`
+copy before merging; the same files are what the host serves, with the
+deployed indexer as the leaderboard source. This repository has no public
+URL of its own recorded, so the post-merge check is "open the domain the
+host serves and confirm the round plan renders" rather than a URL this
+pass can claim to have visited.
